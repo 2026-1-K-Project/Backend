@@ -35,3 +35,10 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Local secrets ###
+.env
+.env.*
+.evn
+.evn.*
+!.env.example
