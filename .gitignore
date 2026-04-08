@@ -38,3 +38,7 @@ out/
 
 ### Local secrets ###
 .env
+.env.*
+.evn
+.evn.*
+!.env.example
