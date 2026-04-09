@@ -25,3 +25,4 @@ public class ChatController {
         return new ChatResponse(openAiChatService.reply(request.message()));
     }
 }
+//test
