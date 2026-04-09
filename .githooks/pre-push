@@ -1,6 +1,6 @@
 #!/bin/sh
 
-blocked_patterns='(^|/)\.env$|(^|/)\.env\..+$|(^|/)\.evn$|(^|/)\.evn\..+$'
+blocked_patterns='(^|/)\.env$|(^|/)\.env\.(?!example$).+$|(^|/)\.evn$|(^|/)\.evn\.(?!example$).+$'
 zero_sha='0000000000000000000000000000000000000000'
 found_blocked=''
 
