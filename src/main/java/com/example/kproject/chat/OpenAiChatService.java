@@ -53,19 +53,19 @@ public class OpenAiChatService {
         }
 
         JsonNode outputText = response.path("output_text");
-        if (outputText.isTextual() && StringUtils.hasText(outputText.asText())) {
-            return outputText.asText();
+        if (outputText.isString() && StringUtils.hasText(outputText.asString())) {
+            return outputText.asString();
         }
 
         JsonNode outputs = response.path("output");
         for (JsonNode output : outputs) {
-            if (!"message".equals(output.path("type").asText())) {
+            if (!"message".equals(output.path("type").asString())) {
                 continue;
             }
 
             for (JsonNode content : output.path("content")) {
-                if ("output_text".equals(content.path("type").asText())) {
-                    String text = content.path("text").asText();
+                if ("output_text".equals(content.path("type").asString())) {
+                    String text = content.path("text").asString();
                     if (StringUtils.hasText(text)) {
                         return text;
                     }
