@@ -5,8 +5,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.JsonNode;
 
+import java.io.IOException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -23,30 +26,54 @@ public class OpenAiChatService {
         this.chatRepository = chatRepository;
     }
 
+    // 기존 텍스트 상담 로직 (유지)
     public String reply(String userMessage) {
-        // [1] 프롬프트 수정: 각 항목 뒤에 줄바꿈을 넣으라고 명시함
-        String developerPrompt =
-                "너는 연애 심리 분석 앱 '마인드컨트롤'의 독설 고수 상담사야.\n\n" +
-                        "[답변 규칙]\n" +
-                        "1. 역질문 절대 금지: 사용자가 답해야 하는 질문은 하지 마.\n" +
-                        "2. 3단 구조 고정: 반드시 아래 형식으로만 대답하고, 항목 사이에는 무조건 줄바꿈을 넣어.\n" +
-                        "💬 상황판단: [내용]\n" +
-                        "⚡ 실전솔루션: [내용]\n" +
-                        "💯 관계점수: [점수]\n" +
-                        "3. 말투: 친한 친구에게 말하는 반말. 'ㅋㅋ', 'ㅠ' 사용.\n" +
-                        "4. 제약 사항: 군더더기 없이 딱 위 세 줄로만 대답해.";
+        String developerPrompt = getCommonPrompt();
 
         Map<String, Object> requestBody = Map.of(
                 "model", properties.model(),
-                "input", List.of(
-                        Map.of("role", "system", "content", List.of(Map.of("type", "input_text", "text", "너는 마인드컨트롤 서비스의 메인 AI야."))),
-                        Map.of("role", "developer", "content", List.of(Map.of("type", "input_text", "text", developerPrompt))),
-                        Map.of("role", "user", "content", List.of(Map.of("type", "input_text", "text", userMessage)))
+                "messages", List.of(
+                        Map.of("role", "developer", "content", developerPrompt),
+                        Map.of("role", "user", "content", userMessage)
                 )
         );
 
+        return callOpenAi(requestBody, userMessage);
+    }
+
+    // ✨ 신규: 이미지 상담 로직
+    public String replyWithImage(MultipartFile imageFile) throws IOException {
+        byte[] bytes = imageFile.getBytes();
+        String base64Image = Base64.getEncoder().encodeToString(bytes);
+
+        String developerPrompt = getCommonPrompt() + "\n제공된 이미지는 카카오톡 대화 캡처본이야. 맥락을 분석해줘.";
+
+        Map<String, Object> requestBody = Map.of(
+                "model", properties.model(),
+                "messages", List.of(
+                        Map.of("role", "developer", "content", developerPrompt),
+                        Map.of("role", "user", "content", List.of(
+                                Map.of("type", "text", "text", "이 대화 분석 좀 해줘."),
+                                Map.of("type", "image_url", "image_url", Map.of("url", "data:image/jpeg;base64," + base64Image))
+                        ))
+                )
+        );
+
+        return callOpenAi(requestBody, "카톡 이미지 분석 요청");
+    }
+
+    private String getCommonPrompt() {
+        return "너는 연애 심리 분석 앱 '마인드컨트롤'의 독설 고수 상담사야.\n" +
+                "[답변 규칙]\n" +
+                "1. 역질문 절대 금지.\n" +
+                "2. 3단 구조 고정: 💬 상황판단, ⚡ 실전솔루션, 💯 관계점수 형식으로 대답하고 항목 사이 줄바꿈 필수.\n" +
+                "3. 말투: 친한 친구에게 말하는 반말. 'ㅋㅋ', 'ㅠ' 사용.\n" +
+                "4. 제약 사항: 군더더기 없이 딱 위 세 줄로만 대답해.";
+    }
+
+    private String callOpenAi(Map<String, Object> requestBody, String logMessage) {
         JsonNode response = restClient.post()
-                .uri("/responses")
+                .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(requestBody)
                 .retrieve()
@@ -54,26 +81,13 @@ public class OpenAiChatService {
 
         if (response == null) throw new RestClientException("Response is empty");
 
-        String aiAnswer = response.path("output_text").asString();
+        String aiAnswer = response.path("choices").get(0).path("message").path("content").asString();
 
-        if (!StringUtils.hasText(aiAnswer)) {
-            JsonNode outputNode = response.path("output");
-            if (outputNode.isArray() && outputNode.has(0)) {
-                aiAnswer = outputNode.get(0).path("content").get(0).path("text").asString();
-            }
-        }
-
-        // ✨ [핵심 수정] 줄바꿈 제거 로직을 삭제했습니다!
-        // 이제 AI가 보낸 \n이 그대로 전달되어 포스트맨에서 3줄로 보일 거예요.
         if (StringUtils.hasText(aiAnswer)) {
             aiAnswer = aiAnswer.trim();
-        }
-
-        if (StringUtils.hasText(aiAnswer)) {
-            chatRepository.save(new ChatHistory(userMessage, aiAnswer));
+            chatRepository.save(new ChatHistory(logMessage, aiAnswer));
             return aiAnswer;
         }
-
         return "답변을 찾지 못했습니다.";
     }
 }
