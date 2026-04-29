@@ -26,10 +26,13 @@ public class ChatController {
         return new ChatResponse(openAiChatService.reply(request.message()));
     }
 
-    @Operation(summary = "카톡 캡처 분석", description = "이미지 파일을 보내면 AI가 내용을 분석해 답변을 반환합니다.")
+    @Operation(summary = "카톡 캡처 분석", description = "이미지 파일과 추가 질문을 보내면 AI가 분석해 답변을 반환합니다.")
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ChatResponse chatWithImage(@RequestParam("image") MultipartFile image) throws IOException {
-        // 이미지를 분석한 뒤 결과를 ChatResponse 형식으로 통일해서 반환합니다.
-        return new ChatResponse(openAiChatService.replyWithImage(image));
+    public ChatResponse chatWithImage(
+            @RequestParam("image") MultipartFile image,
+            @RequestParam(value = "message", required = false) String message
+    ) throws IOException {
+        // 이미지와 메시지를 함께 서비스로 전달합니다.
+        return new ChatResponse(openAiChatService.replyWithImage(image, message));
     }
 }
