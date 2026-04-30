@@ -1,7 +1,8 @@
 package com.example.kproject.controller;
 
 import com.example.kproject.dto.KakaoChatUploadResponse;
-import com.example.kproject.service.KakaoChatFileParserService;
+import com.example.kproject.dto.report.ReportResponse;
+import com.example.kproject.service.report.KakaoChatUploadReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,18 +18,18 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/chat/upload")
 public class ChatUploadController {
 
-    private final KakaoChatFileParserService kakaoChatFileParserService;
+    private final KakaoChatUploadReportService kakaoChatUploadReportService;
 
-    public ChatUploadController(KakaoChatFileParserService kakaoChatFileParserService) {
-        this.kakaoChatFileParserService = kakaoChatFileParserService;
+    public ChatUploadController(KakaoChatUploadReportService kakaoChatUploadReportService) {
+        this.kakaoChatUploadReportService = kakaoChatUploadReportService;
     }
 
     @Operation(
             summary = "Upload a KakaoTalk txt export",
-            description = "Parses KakaoTalk exported txt files into message data and analysis-ready plain text."
+            description = "Parses a KakaoTalk exported txt file and immediately returns the analysis report."
     )
     @PostMapping(value = "/kakao-txt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public KakaoChatUploadResponse uploadKakaoTxt(
+    public ReportResponse uploadKakaoTxt(
             @Parameter(description = "KakaoTalk exported txt file", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Optional upload category")
@@ -36,7 +37,22 @@ public class ChatUploadController {
             @Parameter(description = "Optional analysis target name")
             @RequestParam(value = "targetName", required = false) String targetName
     ) {
-        KakaoChatUploadResponse parsedResponse = kakaoChatFileParserService.parse(file);
-        return parsedResponse.withMeta(parsedResponse.meta().withCategoryAndTargetName(category, targetName));
+        return kakaoChatUploadReportService.generateFromKakaoTxt(file, category, targetName);
+    }
+
+    @Operation(
+            summary = "Upload a KakaoTalk txt export and return parsed data only",
+            description = "Debug endpoint for returning the parsed KakaoTalk message structure without generating a report."
+    )
+    @PostMapping(value = "/kakao-txt/parsed", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public KakaoChatUploadResponse uploadKakaoTxtParsed(
+            @Parameter(description = "KakaoTalk exported txt file", required = true)
+            @RequestParam("file") MultipartFile file,
+            @Parameter(description = "Optional upload category")
+            @RequestParam(value = "category", required = false) String category,
+            @Parameter(description = "Optional analysis target name")
+            @RequestParam(value = "targetName", required = false) String targetName
+    ) {
+        return kakaoChatUploadReportService.parseOnly(file, category, targetName);
     }
 }

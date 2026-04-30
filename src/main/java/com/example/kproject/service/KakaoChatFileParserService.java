@@ -60,7 +60,7 @@ public class KakaoChatFileParserService {
     public String buildAnalysisText(List<KakaoChatMessageDto> messages) {
         return messages.stream()
                 .filter(message -> message.specialType() == KakaoChatSpecialType.TEXT)
-                .sorted(Comparator.comparing(KakaoChatMessageDto::timestamp))
+                .sorted(Comparator.comparing(message -> LocalDateTime.parse(message.dateTime())))
                 .map(message -> new AnalysisLine(
                         message.sender(),
                         KakaoChatParsingUtils.normalizeForAnalysis(message.content())
@@ -206,8 +206,7 @@ public class KakaoChatFileParserService {
                     timeText,
                     timestamp.toString(),
                     content,
-                    KakaoChatParsingUtils.classifySpecialType(content),
-                    timestamp
+                    KakaoChatParsingUtils.classifySpecialType(content)
             );
         }
     }
