@@ -44,6 +44,39 @@ public class EmotionTimelineAnalysisService {
         return List.copyOf(points);
     }
 
+    public List<ReportResponse.EmotionTimelinePoint> analyzeFlexible(List<String> contents) {
+        List<String> analyzableContents = contents.stream()
+                .filter(ReportTextUtils::hasText)
+                .toList();
+        if (analyzableContents.isEmpty()) {
+            return List.of();
+        }
+
+        int targetPoints = Math.min(8, Math.max(4, analyzableContents.size()));
+        int chunkSize = Math.max(1, (int) Math.ceil(analyzableContents.size() / (double) targetPoints));
+        List<ReportResponse.EmotionTimelinePoint> points = new ArrayList<>();
+        int runningScore = 50;
+        int pointIndex = 1;
+
+        for (int start = 0; start < analyzableContents.size(); start += chunkSize) {
+            int end = Math.min(analyzableContents.size(), start + chunkSize);
+            List<String> chunk = analyzableContents.subList(start, end);
+            int chunkScore = scoreFlexibleChunk(chunk);
+            runningScore = ReportTextUtils.clamp(
+                    (int) Math.round((runningScore * 0.45) + (chunkScore * 0.55)),
+                    0,
+                    100
+            );
+            points.add(new ReportResponse.EmotionTimelinePoint(
+                    pointIndex++,
+                    runningScore,
+                    strongestFlexibleMessage(chunk)
+            ));
+        }
+
+        return List.copyOf(points);
+    }
+
     private int scoreChunk(List<ReportMessage> chunk) {
         if (chunk.isEmpty()) {
             return 50;
@@ -51,6 +84,19 @@ public class EmotionTimelineAnalysisService {
 
         double averageSignal = chunk.stream()
                 .mapToInt(message -> emotionSignal(message.content()))
+                .average()
+                .orElse(0);
+
+        return ReportTextUtils.clamp((int) Math.round(50 + averageSignal), 0, 100);
+    }
+
+    private int scoreFlexibleChunk(List<String> chunk) {
+        if (chunk.isEmpty()) {
+            return 50;
+        }
+
+        double averageSignal = chunk.stream()
+                .mapToInt(this::emotionSignal)
                 .average()
                 .orElse(0);
 
@@ -80,6 +126,17 @@ public class EmotionTimelineAnalysisService {
     private String strongestMessage(List<ReportMessage> chunk) {
         return chunk.stream()
                 .map(ReportMessage::content)
+                .filter(ReportTextUtils::hasText)
+                .max((left, right) -> Integer.compare(
+                        Math.abs(emotionSignal(left)),
+                        Math.abs(emotionSignal(right))
+                ))
+                .map(ReportTextUtils::safeText)
+                .orElse("");
+    }
+
+    private String strongestFlexibleMessage(List<String> chunk) {
+        return chunk.stream()
                 .filter(ReportTextUtils::hasText)
                 .max((left, right) -> Integer.compare(
                         Math.abs(emotionSignal(left)),

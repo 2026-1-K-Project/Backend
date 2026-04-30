@@ -44,13 +44,49 @@ public class PersonalityPsychologyAnalysisService {
                 extraversion,
                 openness,
                 agreeableness,
-                conscientiousness
+                conscientiousness,
+                false
         );
-        ReportResponse.Estimate attachmentType = buildAttachmentEstimate(
+        ReportResponse.Estimate attachmentType = buildStructuredAttachmentEstimate(
                 averageReplyMinutes,
                 agreeableness,
                 neuroticism,
                 extraversion
+        );
+
+        return new ReportResponse.PersonalityPsychology(mbti, attachmentType, bigFive);
+    }
+
+    public ReportResponse.PersonalityPsychology analyzeFlexible(List<String> contents) {
+        List<String> analyzableContents = contents.stream()
+                .filter(ReportTextUtils::hasText)
+                .toList();
+
+        int extraversion = scoreExtraversion(analyzableContents);
+        int agreeableness = scoreAgreeableness(analyzableContents, 45);
+        int conscientiousness = scoreConscientiousness(analyzableContents, 90);
+        int openness = scoreOpenness(analyzableContents);
+        int neuroticism = scoreNeuroticism(analyzableContents, 90);
+
+        ReportResponse.BigFive bigFive = new ReportResponse.BigFive(
+                openness,
+                conscientiousness,
+                extraversion,
+                agreeableness,
+                neuroticism
+        );
+
+        ReportResponse.Estimate mbti = buildMbtiEstimate(
+                extraversion,
+                openness,
+                agreeableness,
+                conscientiousness,
+                true
+        );
+        ReportResponse.Estimate attachmentType = buildFlexibleAttachmentEstimate(
+                analyzableContents,
+                agreeableness,
+                neuroticism
         );
 
         return new ReportResponse.PersonalityPsychology(mbti, attachmentType, bigFive);
@@ -113,7 +149,8 @@ public class PersonalityPsychologyAnalysisService {
             int extraversion,
             int openness,
             int agreeableness,
-            int conscientiousness
+            int conscientiousness,
+            boolean lowConfidenceMode
     ) {
         char ei = extraversion >= 55 ? 'E' : 'I';
         char sn = openness >= 55 ? 'N' : 'S';
@@ -122,20 +159,28 @@ public class PersonalityPsychologyAnalysisService {
         String type = "" + ei + sn + tf + jp;
 
         double confidence = confidenceFromThresholds(extraversion, openness, agreeableness, conscientiousness);
+        if (lowConfidenceMode) {
+            confidence = ReportTextUtils.clamp(confidence - 0.18, 0.34, 0.62);
+        }
+
+        String prefix = lowConfidenceMode
+                ? "전체 텍스트 흐름만 기준으로 "
+                : "대화 반응 패턴상 ";
+
         String description = switch (type) {
-            case "ENFP" -> "활발하고 감정 표현이 자연스러운 경향이 추정됩니다.";
-            case "ENFJ" -> "관계를 챙기고 흐름을 주도하려는 경향이 추정됩니다.";
-            case "INFP" -> "감정의 결을 섬세하게 살피는 경향이 추정됩니다.";
-            case "INFJ" -> "의미와 분위기를 함께 읽으려는 경향이 추정됩니다.";
-            case "ESFJ" -> "반응이 빠르고 상대 배려를 중시하는 경향이 추정됩니다.";
-            case "ISTJ" -> "정리와 확인을 중시하는 경향이 추정됩니다.";
-            default -> "대화 반응 패턴상 " + type + " 경향이 추정됩니다.";
+            case "ENFP" -> prefix + "활발하고 감정 표현이 자연스러운 경향이 추정됩니다.";
+            case "ENFJ" -> prefix + "관계를 챙기고 흐름을 주도하려는 경향이 추정됩니다.";
+            case "INFP" -> prefix + "감정의 결을 섬세하게 살피는 경향이 추정됩니다.";
+            case "INFJ" -> prefix + "의미와 분위기를 함께 읽으려는 경향이 추정됩니다.";
+            case "ESFJ" -> prefix + "반응이 빠르고 상대 배려를 중시하는 경향이 추정됩니다.";
+            case "ISTJ" -> prefix + "정리와 확인을 중시하는 경향이 추정됩니다.";
+            default -> prefix + type + " 경향이 추정됩니다.";
         };
 
         return new ReportResponse.Estimate(type, confidence, description);
     }
 
-    private ReportResponse.Estimate buildAttachmentEstimate(
+    private ReportResponse.Estimate buildStructuredAttachmentEstimate(
             int averageReplyMinutes,
             int agreeableness,
             int neuroticism,
@@ -163,6 +208,33 @@ public class PersonalityPsychologyAnalysisService {
                 0.52,
                 0.82
         );
+
+        return new ReportResponse.Estimate(type, confidence, description);
+    }
+
+    private ReportResponse.Estimate buildFlexibleAttachmentEstimate(
+            List<String> contents,
+            int agreeableness,
+            int neuroticism
+    ) {
+        long reassuringCount = contents.stream()
+                .filter(content -> ReportTextUtils.containsAny(content, ReportTextUtils.EMPATHY_TERMS))
+                .count();
+        long negativeCount = contents.stream()
+                .filter(ReportTextUtils::hasNegativeTone)
+                .count();
+
+        String type;
+        if (reassuringCount >= negativeCount + 2 && agreeableness >= 60) {
+            type = "안정형 애착";
+        } else if (negativeCount >= 2 && neuroticism >= 58) {
+            type = "불안형 애착";
+        } else {
+            type = "혼합형 애착";
+        }
+
+        String description = "메시지 구조가 제한적이어서 전체 텍스트 흐름만 기준으로 애착 경향을 추정했습니다.";
+        double confidence = ReportTextUtils.clamp(0.36 + Math.abs(agreeableness - neuroticism) / 250.0, 0.36, 0.58);
 
         return new ReportResponse.Estimate(type, confidence, description);
     }

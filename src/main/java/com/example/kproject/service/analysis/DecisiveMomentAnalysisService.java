@@ -30,6 +30,17 @@ public class DecisiveMomentAnalysisService {
                 .toList();
     }
 
+    public List<ReportResponse.DecisiveMoment> analyzeFlexible(List<String> contents) {
+        return contents.stream()
+                .filter(ReportTextUtils::hasText)
+                .map(this::buildFlexibleMoment)
+                .filter(momentWithImpact -> momentWithImpact.impact() > 14)
+                .sorted(Comparator.comparingInt(MomentWithImpact::impact).reversed())
+                .limit(3)
+                .map(MomentWithImpact::moment)
+                .toList();
+    }
+
     private MomentWithImpact buildMoment(ReportAnalysisContext context, ReportMessage message) {
         int impact = impactScore(message.content());
         String fallbackDescription = descriptionFor(message.content());
@@ -53,6 +64,19 @@ public class DecisiveMomentAnalysisService {
         );
     }
 
+    private MomentWithImpact buildFlexibleMoment(String content) {
+        String normalizedContent = ReportTextUtils.safeText(content);
+        return new MomentWithImpact(
+                new ReportResponse.DecisiveMoment(
+                        "결정적 순간",
+                        null,
+                        normalizedContent,
+                        descriptionFor(normalizedContent)
+                ),
+                impactScore(normalizedContent)
+        );
+    }
+
     private int impactScore(String content) {
         int impact = 0;
         if (ReportTextUtils.hasProposal(content)) {
@@ -72,18 +96,18 @@ public class DecisiveMomentAnalysisService {
 
     private String descriptionFor(String content) {
         if (ReportTextUtils.hasProposal(content)) {
-            return "함께하자는 제안 이후 대화 온도가 올라간 것으로 추정됩니다.";
+            return "함께하자는 제안 이후 분위기가 더 적극적으로 바뀔 여지가 있어 보입니다.";
         }
         if (ReportTextUtils.hasPositiveTone(content)) {
-            return "긍정 표현이 늘어나면서 분위기가 부드러워진 것으로 보입니다.";
+            return "긍정 표현이 늘어나면서 대화 온도가 올라간 구간으로 추정됩니다.";
         }
         if (ReportTextUtils.hasNegativeTone(content)) {
-            return "이 구간에서 대화의 긴장도가 잠시 높아진 것으로 추정됩니다.";
+            return "이 구간에서는 대화의 긴장도나 피로도가 잠시 높아진 것으로 보입니다.";
         }
         if (ReportTextUtils.isQuestion(content)) {
-            return "상대를 더 알고자 하는 질문이 흐름 전환에 기여한 것으로 보입니다.";
+            return "질문이 대화 흐름을 다시 열어 준 구간으로 추정됩니다.";
         }
-        return "이 문장이 대화 흐름 변곡점으로 작용한 것으로 추정됩니다.";
+        return "이 문장이 대화 흐름의 변곡점 역할을 한 것으로 보입니다.";
     }
 
     private record MomentWithImpact(

@@ -1,12 +1,11 @@
 package com.example.kproject.service.report;
 
-import com.example.kproject.domain.ConversationReport;
 import com.example.kproject.domain.ReportAnalysisContext;
 import com.example.kproject.domain.ReportMessage;
+import com.example.kproject.dto.report.ReportAnalysisMode;
 import com.example.kproject.dto.report.ReportGenerateRequest;
 import com.example.kproject.dto.report.ReportResponse;
 import com.example.kproject.exception.ReportGenerationException;
-import com.example.kproject.repository.ConversationReportRepository;
 import com.example.kproject.service.ai.ReportNarrativeAiService;
 import com.example.kproject.service.analysis.DecisiveMomentAnalysisService;
 import com.example.kproject.service.analysis.EmotionTimelineAnalysisService;
@@ -14,13 +13,13 @@ import com.example.kproject.service.analysis.InterestScoreAnalysisService;
 import com.example.kproject.service.analysis.KeywordExtractionService;
 import com.example.kproject.service.analysis.LanguageSyncAnalysisService;
 import com.example.kproject.service.analysis.PersonalityPsychologyAnalysisService;
+import com.example.kproject.service.analysis.QualitativeSignalsAnalysisService;
 import com.example.kproject.service.analysis.ReplyTimeAnalysisService;
 import com.example.kproject.service.analysis.TalkRatioAnalysisService;
 import com.example.kproject.service.insight.ActionableInsightService;
 import com.example.kproject.util.ReportTextUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,8 +28,7 @@ import java.util.List;
 @Service
 public class ReportGenerationService {
 
-    private final ConversationReportRepository conversationReportRepository;
-    private final ObjectMapper objectMapper;
+    private final ReportPersistenceService reportPersistenceService;
     private final ReportNarrativeAiService reportNarrativeAiService;
     private final TalkRatioAnalysisService talkRatioAnalysisService;
     private final ReplyTimeAnalysisService replyTimeAnalysisService;
@@ -41,10 +39,10 @@ public class ReportGenerationService {
     private final EmotionTimelineAnalysisService emotionTimelineAnalysisService;
     private final DecisiveMomentAnalysisService decisiveMomentAnalysisService;
     private final ActionableInsightService actionableInsightService;
+    private final QualitativeSignalsAnalysisService qualitativeSignalsAnalysisService;
 
     public ReportGenerationService(
-            ConversationReportRepository conversationReportRepository,
-            ObjectMapper objectMapper,
+            ReportPersistenceService reportPersistenceService,
             ReportNarrativeAiService reportNarrativeAiService,
             TalkRatioAnalysisService talkRatioAnalysisService,
             ReplyTimeAnalysisService replyTimeAnalysisService,
@@ -54,10 +52,10 @@ public class ReportGenerationService {
             PersonalityPsychologyAnalysisService personalityPsychologyAnalysisService,
             EmotionTimelineAnalysisService emotionTimelineAnalysisService,
             DecisiveMomentAnalysisService decisiveMomentAnalysisService,
-            ActionableInsightService actionableInsightService
+            ActionableInsightService actionableInsightService,
+            QualitativeSignalsAnalysisService qualitativeSignalsAnalysisService
     ) {
-        this.conversationReportRepository = conversationReportRepository;
-        this.objectMapper = objectMapper;
+        this.reportPersistenceService = reportPersistenceService;
         this.reportNarrativeAiService = reportNarrativeAiService;
         this.talkRatioAnalysisService = talkRatioAnalysisService;
         this.replyTimeAnalysisService = replyTimeAnalysisService;
@@ -68,9 +66,14 @@ public class ReportGenerationService {
         this.emotionTimelineAnalysisService = emotionTimelineAnalysisService;
         this.decisiveMomentAnalysisService = decisiveMomentAnalysisService;
         this.actionableInsightService = actionableInsightService;
+        this.qualitativeSignalsAnalysisService = qualitativeSignalsAnalysisService;
     }
 
     public ReportResponse generate(ReportGenerateRequest request) {
+        return generate(request, null);
+    }
+
+    public ReportResponse generate(ReportGenerateRequest request, String warning) {
         ReportAnalysisContext context = toContext(request);
 
         ReportResponse.TalkRatio talkRatio = talkRatioAnalysisService.calculate(context);
@@ -94,6 +97,8 @@ public class ReportGenerationService {
                 replyTime.averageReplyMinutes(),
                 languageSync
         );
+        ReportResponse.QualitativeSignals qualitativeSignals =
+                qualitativeSignalsAnalysisService.analyzeStructured(context, keywords);
         List<ReportResponse.EmotionTimelinePoint> emotionTimeline = emotionTimelineAnalysisService.analyze(context);
         List<ReportResponse.DecisiveMoment> decisiveMoments = decisiveMomentAnalysisService.analyze(context);
         ReportResponse.ActionableInsights actionableInsights = actionableInsightService.generate(
@@ -108,15 +113,19 @@ public class ReportGenerationService {
         ReportResponse draftResponse = new ReportResponse(
                 null,
                 context.category(),
+                ReportAnalysisMode.STRUCTURED,
+                true,
+                warning,
                 summary,
                 relationshipDynamics,
                 personalityPsychology,
+                qualitativeSignals,
                 emotionTimeline,
                 decisiveMoments,
                 actionableInsights
         );
 
-        return saveAndAttachId(draftResponse, context);
+        return reportPersistenceService.persist(draftResponse, context.category(), context.participants());
     }
 
     private ReportAnalysisContext toContext(ReportGenerateRequest request) {
@@ -167,36 +176,16 @@ public class ReportGenerationService {
     private String buildHeadline(ReportAnalysisContext context, int interestScore) {
         String fallbackHeadline;
         if (interestScore >= 75) {
-            fallbackHeadline = "서로의 반응이 꽤 잘 맞는 편으로 보입니다. 다음 대화 연결도 무난할 가능성이 있습니다.";
+            fallbackHeadline = "서로의 반응이 꽤 잘 맞는 편으로 보여요. 다음 대화도 자연스럽게 이어질 가능성이 있습니다.";
         } else if (interestScore >= 60) {
-            fallbackHeadline = "긍정적인 기류가 이어지는 것으로 보입니다. 조금만 더 자연스럽게 확장해 보세요.";
+            fallbackHeadline = "긍정적인 기류가 이어지는 편이에요. 조금만 더 자연스럽게 확장해 보세요.";
         } else if (interestScore >= 45) {
             fallbackHeadline = "관심 신호와 탐색 신호가 함께 보입니다. 속도를 올리기보다 흐름을 다지는 편이 좋겠습니다.";
         } else {
-            fallbackHeadline = "아직은 반응 강도가 뚜렷하지 않아 보입니다. 부담 없는 주제로 다시 온도를 올려보는 편이 안전합니다.";
+            fallbackHeadline = "아직은 반응 강도가 뚜렷하지 않아 보여요. 부담 없는 주제로 다시 온도를 올려보는 편이 안전합니다.";
         }
 
         return reportNarrativeAiService.generateHeadline(context, interestScore, fallbackHeadline)
                 .orElse(fallbackHeadline);
-    }
-
-    private ReportResponse saveAndAttachId(ReportResponse draftResponse, ReportAnalysisContext context) {
-        try {
-            String participantsJson = objectMapper.writeValueAsString(context.participants());
-            String summaryJson = objectMapper.writeValueAsString(draftResponse.summary());
-
-            ConversationReport saved = conversationReportRepository.save(
-                    new ConversationReport(context.category(), participantsJson, summaryJson, "{}")
-            );
-
-            ReportResponse persistedResponse = draftResponse.withReportId(saved.getId());
-            String fullReportJson = objectMapper.writeValueAsString(persistedResponse);
-            saved.updateStoredJson(summaryJson, fullReportJson);
-            conversationReportRepository.save(saved);
-
-            return persistedResponse;
-        } catch (Exception exception) {
-            throw new ReportGenerationException("Failed to serialize report json.", exception);
-        }
     }
 }

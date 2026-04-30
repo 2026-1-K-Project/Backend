@@ -5,9 +5,13 @@ import java.util.List;
 public record ReportResponse(
         Long reportId,
         String category,
+        ReportAnalysisMode analysisMode,
+        boolean structuredParsingAvailable,
+        String warning,
         Summary summary,
         RelationshipDynamics relationshipDynamics,
         PersonalityPsychology personalityPsychology,
+        QualitativeSignals qualitativeSignals,
         List<EmotionTimelinePoint> emotionTimeline,
         List<DecisiveMoment> decisiveMoments,
         ActionableInsights actionableInsights
@@ -16,9 +20,13 @@ public record ReportResponse(
         return new ReportResponse(
                 reportId,
                 category,
+                analysisMode,
+                structuredParsingAvailable,
+                warning,
                 summary,
                 relationshipDynamics,
                 personalityPsychology,
+                qualitativeSignals,
                 emotionTimeline,
                 decisiveMoments,
                 actionableInsights
@@ -49,6 +57,16 @@ public record ReportResponse(
             Estimate mbti,
             Estimate attachmentType,
             BigFive bigFive
+    ) {
+    }
+
+    public record QualitativeSignals(
+            String relationshipSummary,
+            String counterpartyTendency,
+            List<String> positiveTopics,
+            List<String> likelyPreferences,
+            List<String> likelyDislikes,
+            List<String> recommendedReplies
     ) {
     }
 

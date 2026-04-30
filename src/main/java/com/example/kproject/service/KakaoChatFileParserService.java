@@ -1,5 +1,7 @@
 package com.example.kproject.service;
 
+import com.example.kproject.domain.KakaoChatParsedDocument;
+import com.example.kproject.domain.KakaoChatParsingStats;
 import com.example.kproject.dto.KakaoChatMessageDto;
 import com.example.kproject.dto.KakaoChatMetaDto;
 import com.example.kproject.dto.KakaoChatParseErrorDto;
@@ -26,40 +28,37 @@ import java.util.Optional;
 public class KakaoChatFileParserService {
 
     public KakaoChatUploadResponse parse(MultipartFile file) {
+        return parseDocument(file).toUploadResponse();
+    }
+
+    public KakaoChatParsedDocument parseDocument(MultipartFile file) {
         validateFile(file);
 
-        List<String> lines = readAllLines(file);
-        if (lines.isEmpty()) {
+        RawTextPayload rawTextPayload = readRawText(file);
+        if (!StringUtils.hasText(rawTextPayload.rawText())) {
             throw new ChatUploadException("Uploaded file is empty.");
         }
 
         List<KakaoChatParseErrorDto> errors = new ArrayList<>();
+        KakaoChatMetaDto meta = extractMeta(rawTextPayload.lines());
+        ParseComputation parseComputation = parseMessages(rawTextPayload.lines(), meta.savedAt(), errors);
+        String analysisText = buildAnalysisText(parseComputation.messages());
 
-        String title = KakaoChatParsingUtils.stripBom(lines.get(0));
-        String savedAt = extractSavedAt(lines, errors);
-        KakaoChatMetaDto meta = new KakaoChatMetaDto(
-                title,
-                savedAt,
-                KakaoChatParsingUtils.deriveRoomName(title),
-                null,
-                null
-        );
-
-        List<KakaoChatMessageDto> messages = parseMessages(lines, errors);
-        String analysisText = buildAnalysisText(messages);
-
-        return new KakaoChatUploadResponse(
+        return new KakaoChatParsedDocument(
                 meta,
-                messages.size(),
-                List.copyOf(messages),
+                rawTextPayload.rawText(),
+                List.copyOf(rawTextPayload.lines()),
+                List.copyOf(parseComputation.messages()),
                 analysisText,
-                List.copyOf(errors)
+                List.copyOf(errors),
+                parseComputation.stats()
         );
     }
 
     public String buildAnalysisText(List<KakaoChatMessageDto> messages) {
         return messages.stream()
                 .filter(message -> message.specialType() == KakaoChatSpecialType.TEXT)
+                .filter(message -> StringUtils.hasText(message.dateTime()))
                 .sorted(Comparator.comparing(message -> LocalDateTime.parse(message.dateTime())))
                 .map(message -> new AnalysisLine(
                         message.sender(),
@@ -77,42 +76,88 @@ public class KakaoChatFileParserService {
         }
     }
 
-    private List<String> readAllLines(MultipartFile file) {
+    private RawTextPayload readRawText(MultipartFile file) {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)
         )) {
             List<String> lines = new ArrayList<>();
+            StringBuilder rawTextBuilder = new StringBuilder();
             String line;
+
             while ((line = reader.readLine()) != null) {
                 lines.add(line);
+                if (rawTextBuilder.length() > 0) {
+                    rawTextBuilder.append('\n');
+                }
+                rawTextBuilder.append(line);
             }
-            return lines;
+
+            return new RawTextPayload(rawTextBuilder.toString(), lines);
         } catch (IOException exception) {
             throw new ChatUploadException("Failed to read the uploaded txt file.", exception);
         }
     }
 
-    private String extractSavedAt(List<String> lines, List<KakaoChatParseErrorDto> errors) {
-        if (lines.size() < 2) {
-            errors.add(new KakaoChatParseErrorDto(2, "", "The savedAt metadata line is missing."));
-            return null;
-        }
+    private KakaoChatMetaDto extractMeta(List<String> lines) {
+        String title = lines.stream()
+                .map(KakaoChatParsingUtils::stripBom)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
 
-        Optional<String> savedAt = KakaoChatParsingUtils.extractSavedAt(lines.get(1));
-        if (savedAt.isEmpty()) {
-            errors.add(new KakaoChatParseErrorDto(2, lines.get(1), "The savedAt metadata line could not be parsed."));
-            return null;
-        }
-        return savedAt.get();
+        String savedAt = lines.stream()
+                .map(KakaoChatParsingUtils::extractSavedAt)
+                .flatMap(Optional::stream)
+                .findFirst()
+                .orElse(null);
+
+        return new KakaoChatMetaDto(
+                title,
+                savedAt,
+                KakaoChatParsingUtils.deriveRoomName(title),
+                null,
+                null
+        );
     }
 
-    private List<KakaoChatMessageDto> parseMessages(List<String> lines, List<KakaoChatParseErrorDto> errors) {
+    private ParseComputation parseMessages(
+            List<String> lines,
+            String savedAt,
+            List<KakaoChatParseErrorDto> errors
+    ) {
         List<KakaoChatMessageDto> messages = new ArrayList<>();
-        LocalDate currentDate = null;
+        Optional<LocalDate> savedAtDate = KakaoChatParsingUtils.extractSavedAtDate(savedAt);
+        LocalDate currentDate = savedAtDate.orElse(null);
+        boolean usedSavedAtDateFallback = false;
         WorkingMessage currentMessage = null;
 
-        for (int index = 2; index < lines.size(); index++) {
-            String rawLine = index == 2 ? KakaoChatParsingUtils.stripBom(lines.get(index)) : lines.get(index);
+        int totalRelevantLines = 0;
+        int parsedRelevantLines = 0;
+        int messageStartCount = 0;
+        int continuationLineCount = 0;
+        int dateSeparatorCount = 0;
+        int unmatchedLineCount = 0;
+
+        for (int index = 0; index < lines.size(); index++) {
+            String rawLine = KakaoChatParsingUtils.stripBom(lines.get(index));
+
+            if (index == 0 && KakaoChatParsingUtils.looksLikeConversationTitle(rawLine)) {
+                continue;
+            }
+            if (KakaoChatParsingUtils.isSavedAtLine(rawLine)) {
+                continue;
+            }
+
+            if (!StringUtils.hasText(rawLine)) {
+                if (currentMessage != null) {
+                    currentMessage.append("");
+                    continuationLineCount++;
+                    parsedRelevantLines++;
+                }
+                continue;
+            }
+
+            totalRelevantLines++;
 
             Optional<LocalDate> dateSeparator = KakaoChatParsingUtils.parseDateSeparator(rawLine);
             if (dateSeparator.isPresent()) {
@@ -121,6 +166,8 @@ public class KakaoChatFileParserService {
                     currentMessage = null;
                 }
                 currentDate = dateSeparator.get();
+                dateSeparatorCount++;
+                parsedRelevantLines++;
                 continue;
             }
 
@@ -131,31 +178,50 @@ public class KakaoChatFileParserService {
                     messages.add(currentMessage.toDto());
                 }
 
-                if (currentDate == null) {
+                LocalDate resolvedDate = currentDate;
+                if (resolvedDate == null && savedAtDate.isPresent()) {
+                    resolvedDate = savedAtDate.get();
+                    usedSavedAtDateFallback = true;
+                }
+
+                if (resolvedDate == null) {
                     errors.add(new KakaoChatParseErrorDto(
                             index + 1,
                             rawLine,
-                            "A message was found before any date separator."
+                            "Could not infer a date for this message."
                     ));
-                    currentMessage = null;
+                    unmatchedLineCount++;
                     continue;
                 }
 
-                currentMessage = WorkingMessage.start(currentDate, messageStart.get());
-                continue;
+                try {
+                    currentMessage = WorkingMessage.start(resolvedDate, messageStart.get());
+                    messageStartCount++;
+                    parsedRelevantLines++;
+                    continue;
+                } catch (IllegalArgumentException exception) {
+                    errors.add(new KakaoChatParseErrorDto(
+                            index + 1,
+                            rawLine,
+                            "Could not parse the message time."
+                    ));
+                    currentMessage = null;
+                    unmatchedLineCount++;
+                    continue;
+                }
             }
 
             if (currentMessage != null) {
                 currentMessage.append(rawLine);
-                continue;
-            }
-
-            if (StringUtils.hasText(rawLine)) {
+                continuationLineCount++;
+                parsedRelevantLines++;
+            } else {
                 errors.add(new KakaoChatParseErrorDto(
                         index + 1,
                         rawLine,
-                        "A continuation line appeared without a preceding message."
+                        "This line could not be attached to a structured message."
                 ));
+                unmatchedLineCount++;
             }
         }
 
@@ -163,10 +229,37 @@ public class KakaoChatFileParserService {
             messages.add(currentMessage.toDto());
         }
 
-        return messages;
+        double successRate = totalRelevantLines == 0
+                ? 0.0
+                : parsedRelevantLines / (double) totalRelevantLines;
+
+        KakaoChatParsingStats stats = new KakaoChatParsingStats(
+                totalRelevantLines,
+                parsedRelevantLines,
+                messageStartCount,
+                continuationLineCount,
+                dateSeparatorCount,
+                unmatchedLineCount,
+                successRate,
+                usedSavedAtDateFallback
+        );
+
+        return new ParseComputation(messages, stats);
     }
 
     private record AnalysisLine(String sender, String content) {
+    }
+
+    private record RawTextPayload(
+            String rawText,
+            List<String> lines
+    ) {
+    }
+
+    private record ParseComputation(
+            List<KakaoChatMessageDto> messages,
+            KakaoChatParsingStats stats
+    ) {
     }
 
     private static final class WorkingMessage {

@@ -64,6 +64,41 @@ public class InterestScoreAnalysisService {
         return ReportTextUtils.clamp(score, 0, 100);
     }
 
+    public int estimateFromContents(List<String> contents) {
+        List<String> analyzableContents = contents.stream()
+                .filter(ReportTextUtils::hasText)
+                .toList();
+        if (analyzableContents.isEmpty()) {
+            return 0;
+        }
+
+        int questionCount = (int) analyzableContents.stream().filter(ReportTextUtils::isQuestion).count();
+        int positiveCount = (int) analyzableContents.stream().filter(ReportTextUtils::hasPositiveTone).count();
+        int laughCount = (int) analyzableContents.stream().filter(ReportTextUtils::hasLaugh).count();
+        int proposalCount = (int) analyzableContents.stream().filter(ReportTextUtils::hasProposal).count();
+
+        double questionScore = ratio(questionCount, analyzableContents.size());
+        double positiveScore = ratio(positiveCount, analyzableContents.size());
+        double laughScore = ratio(laughCount, analyzableContents.size());
+        double proposalScore = ratio(proposalCount, analyzableContents.size());
+        double lengthScore = ReportTextUtils.clamp(
+                analyzableContents.stream().mapToInt(content -> ReportTextUtils.safeText(content).length()).average().orElse(0) / 35.0,
+                0,
+                1
+        );
+        double densityBonus = ReportTextUtils.clamp(analyzableContents.size() / 12.0, 0, 1);
+
+        int score = ReportTextUtils.INTEREST_BASE_SCORE
+                + weighted(questionScore, 12)
+                + weighted(positiveScore, 20)
+                + weighted(laughScore, 10)
+                + weighted(proposalScore, 12)
+                + weighted(lengthScore, 6)
+                + weighted(densityBonus, 8);
+
+        return ReportTextUtils.clamp(score, 0, 100);
+    }
+
     private double ratio(int count, int total) {
         if (total <= 0) {
             return 0;

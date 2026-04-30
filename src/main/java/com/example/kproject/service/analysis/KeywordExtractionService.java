@@ -12,9 +12,14 @@ public class KeywordExtractionService {
     public List<String> extract(ReportAnalysisContext context) {
         List<String> contents = context.messages().stream()
                 .map(message -> message.content())
-                .filter(ReportTextUtils::hasText)
                 .toList();
+        return extractFromContents(contents);
+    }
 
-        return ReportTextUtils.distinctTopTokens(contents, 5);
+    public List<String> extractFromContents(List<String> contents) {
+        return ReportTextUtils.distinctTopTokens(
+                contents.stream().filter(ReportTextUtils::hasText).toList(),
+                5
+        );
     }
 }

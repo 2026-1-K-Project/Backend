@@ -25,11 +25,11 @@ public final class ReportTextUtils {
     public static final int INTEREST_MUTUALITY_WEIGHT = 10;
 
     public static final Set<String> POSITIVE_TERMS = Set.of(
-            "좋아", "좋아요", "좋다", "좋네", "좋겠다", "재밌", "재미", "행복", "고마워", "감사",
-            "보고싶", "웃겨", "귀엽", "최고", "설렌", "즐거", "기대", "오", "와"
+            "좋아", "좋아요", "좋다", "좋네", "좋겠다", "재밌", "재미", "행복",
+            "고마워", "감사", "보고싶", "웃겨", "귀엽", "최고", "설레", "기대"
     );
     public static final Set<String> NEGATIVE_TERMS = Set.of(
-            "싫", "별로", "바빠", "피곤", "힘들", "짜증", "불편", "부담", "곤란", "미안", "어색"
+            "싫", "별로", "바빠", "피곤", "힘들", "짜증", "불편", "부담", "곤란", "어색", "귀찮"
     );
     public static final Set<String> PROPOSAL_TERMS = Set.of(
             "같이", "보자", "갈래", "먹자", "할래", "만날", "다음에", "언제", "약속", "가자", "보러"
@@ -38,7 +38,7 @@ public final class ReportTextUtils {
             "괜찮", "이해", "다행", "고생", "수고", "응원", "맞아", "그렇구나", "헉", "아쉽"
     );
     public static final Set<String> PLANNING_TERMS = Set.of(
-            "일정", "시간", "정리", "확인", "준비", "먼저", "계획", "약속", "정하", "체크", "공유"
+            "일정", "시간", "정리", "확인", "준비", "계획", "약속", "정하", "체크", "공유"
     );
     public static final Set<String> EXPLORATION_TERMS = Set.of(
             "새로운", "여행", "전시", "영화", "아이디어", "궁금", "도전", "추천", "가보고", "해보고"
@@ -46,9 +46,9 @@ public final class ReportTextUtils {
     public static final Set<String> STOPWORDS = Set.of(
             "오늘", "내일", "지금", "그냥", "진짜", "약간", "엄청", "너무", "나는", "너는", "우리는",
             "그리고", "근데", "그러면", "이거", "그거", "저거", "우리", "저도", "나도", "너도",
-            "있어", "없어", "해서", "하면", "하는", "했어", "했네", "해야", "해서요", "근데요",
-            "이제", "그럼", "혹시", "에서", "으로", "에게", "이랑", "하고", "같은", "입니다",
-            "있는데", "있으면", "ㅋㅋ", "ㅎㅎ"
+            "있어", "없어", "해서", "하면", "하는", "했어", "해야", "해서요", "이제", "그럼",
+            "혹시", "에서", "으로", "에게", "이랑", "하고", "같은", "입니다", "있는데", "있으면",
+            "ㅋㅋ", "ㅎㅎ"
     );
 
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[가-힣A-Za-z0-9]+");
@@ -179,5 +179,27 @@ public final class ReportTextUtils {
             return 0;
         }
         return (int) Math.max(0, Duration.between(first.dateTime(), second.dateTime()).toMinutes());
+    }
+
+    public static String normalizeCategory(String category) {
+        if (category == null) {
+            return "general";
+        }
+        if (category.contains("썸") || category.contains("연애")) {
+            return "romance";
+        }
+        if (category.contains("친구") || category.contains("우정")) {
+            return "friend";
+        }
+        if (category.contains("직장") || category.contains("상사")) {
+            return "work";
+        }
+        if (category.contains("팀플") || category.contains("동아리")) {
+            return "team";
+        }
+        if (category.contains("가족")) {
+            return "family";
+        }
+        return "general";
     }
 }
