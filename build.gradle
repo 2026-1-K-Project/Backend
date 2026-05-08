@@ -20,6 +20,7 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'
     // REST API, 컨트롤러(@RestController), JSON 요청/응답 처리, 내장 톰캣 사용
 
     implementation 'org.springframework.boot:spring-boot-starter-validation'
