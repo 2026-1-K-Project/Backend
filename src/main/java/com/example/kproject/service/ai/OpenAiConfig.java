@@ -1,4 +1,4 @@
-package com.example.kproject.chat;
+package com.example.kproject.service.ai;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

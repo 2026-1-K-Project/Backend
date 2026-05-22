@@ -20,6 +20,10 @@ public final class KakaoChatParsingUtils {
             Pattern.compile("^\\[(.+?)\\]\\s*\\[((?:오전|오후|AM|PM|am|pm)?\\s*\\d{1,2}:\\d{2})\\](?:\\s*(.*))?$"),
             Pattern.compile("^(.+?)\\s*\\[((?:오전|오후|AM|PM|am|pm)?\\s*\\d{1,2}:\\d{2})\\](?:\\s*(.*))?$")
     );
+    private static final List<Pattern> FULL_TIMESTAMP_MESSAGE_PATTERNS = List.of(
+            Pattern.compile("^(\\d{4})\\s*년\\s*(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일\\s*((?:오전|오후|AM|PM|am|pm)?\\s*\\d{1,2}:\\d{2})\\s*,\\s*(.+?)\\s*[:：]\\s*(.*)$"),
+            Pattern.compile("^(\\d{4})\\s*[./-]\\s*(\\d{1,2})\\s*[./-]\\s*(\\d{1,2})\\s*((?:오전|오후|AM|PM|am|pm)?\\s*\\d{1,2}:\\d{2})\\s*,\\s*(.+?)\\s*[:：]\\s*(.*)$")
+    );
     private static final List<Pattern> DATE_SEPARATOR_PATTERNS = List.of(
             Pattern.compile("^(?:-+\\s*)?(\\d{4})\\s*년\\s*(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일(?:\\s+.+)?(?:\\s*-+)?$"),
             Pattern.compile("^(?:-+\\s*)?(\\d{4})\\s*[./-]\\s*(\\d{1,2})\\s*[./-]\\s*(\\d{1,2})(?:\\.|\\s+.+)?(?:\\s*-+)?$")
@@ -29,7 +33,10 @@ public final class KakaoChatParsingUtils {
             Pattern.compile("^저장 날짜\\s*:\\s*(.+)$"),
             Pattern.compile("^Saved at\\s*:\\s*(.+)$", Pattern.CASE_INSENSITIVE)
     );
-    private static final Pattern SAVED_AT_DATE_PATTERN = Pattern.compile("(\\d{4})-(\\d{1,2})-(\\d{1,2})");
+    private static final List<Pattern> SAVED_AT_DATE_PATTERNS = List.of(
+            Pattern.compile("(\\d{4})-(\\d{1,2})-(\\d{1,2})"),
+            Pattern.compile("(\\d{4})\\s*년\\s*(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일")
+    );
     private static final Pattern IMAGE_PATTERN = Pattern.compile("^사진(?: \\d+장)?$");
     private static final Pattern FILE_PATTERN = Pattern.compile("^파일\\s*:\\s*.+$");
     private static final Pattern SIMPLE_SPEAKER_PREFIX_PATTERN = Pattern.compile("^([^:：]{1,30})[:：]\\s*(.+)$");
@@ -86,15 +93,17 @@ public final class KakaoChatParsingUtils {
             return Optional.empty();
         }
 
-        Matcher matcher = SAVED_AT_DATE_PATTERN.matcher(savedAt);
-        if (!matcher.find()) {
-            return Optional.empty();
+        for (Pattern pattern : SAVED_AT_DATE_PATTERNS) {
+            Matcher matcher = pattern.matcher(savedAt);
+            if (matcher.find()) {
+                int year = Integer.parseInt(matcher.group(1));
+                int month = Integer.parseInt(matcher.group(2));
+                int day = Integer.parseInt(matcher.group(3));
+                return Optional.of(LocalDate.of(year, month, day));
+            }
         }
 
-        int year = Integer.parseInt(matcher.group(1));
-        int month = Integer.parseInt(matcher.group(2));
-        int day = Integer.parseInt(matcher.group(3));
-        return Optional.of(LocalDate.of(year, month, day));
+        return Optional.empty();
     }
 
     public static String deriveRoomName(String title) {
@@ -136,6 +145,26 @@ public final class KakaoChatParsingUtils {
         }
 
         String normalized = stripBom(line).trim();
+        for (Pattern pattern : FULL_TIMESTAMP_MESSAGE_PATTERNS) {
+            Matcher matcher = pattern.matcher(normalized);
+            if (matcher.matches()) {
+                LocalDate date = LocalDate.of(
+                        Integer.parseInt(matcher.group(1)),
+                        Integer.parseInt(matcher.group(2)),
+                        Integer.parseInt(matcher.group(3))
+                );
+                String timeText = matcher.group(4) == null ? null : matcher.group(4).trim();
+                String sender = matcher.group(5) == null ? null : matcher.group(5).trim();
+                String inlineContent = matcher.group(6);
+                return Optional.of(new ParsedMessageStart(
+                        sender,
+                        timeText,
+                        inlineContent == null ? null : inlineContent.trim(),
+                        date
+                ));
+            }
+        }
+
         for (Pattern pattern : MESSAGE_START_PATTERNS) {
             Matcher matcher = pattern.matcher(normalized);
             if (matcher.matches()) {
@@ -145,7 +174,8 @@ public final class KakaoChatParsingUtils {
                 return Optional.of(new ParsedMessageStart(
                         sender,
                         timeText,
-                        inlineContent == null ? null : inlineContent.trim()
+                        inlineContent == null ? null : inlineContent.trim(),
+                        null
                 ));
             }
         }
@@ -252,7 +282,8 @@ public final class KakaoChatParsingUtils {
     public record ParsedMessageStart(
             String sender,
             String timeText,
-            String inlineContent
+            String inlineContent,
+            LocalDate date
     ) {
     }
 }

@@ -48,7 +48,10 @@ public class ReportStorageService {
                     normalizedResult.warning()
             ));
         } catch (Exception exception) {
-            throw new ReportGenerationException("Failed to store normalized conversation.", exception);
+            throw new ReportGenerationException(
+                    "Failed to store normalized conversation: " + rootCauseMessage(exception),
+                    exception
+            );
         }
     }
 
@@ -72,5 +75,13 @@ public class ReportStorageService {
         } catch (Exception exception) {
             throw new ReportGenerationException("Failed to read report participants.", exception);
         }
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable cursor = throwable;
+        while (cursor.getCause() != null) {
+            cursor = cursor.getCause();
+        }
+        return cursor.getMessage() == null ? cursor.getClass().getSimpleName() : cursor.getMessage();
     }
 }
