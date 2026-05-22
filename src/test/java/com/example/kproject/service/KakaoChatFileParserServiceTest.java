@@ -86,6 +86,27 @@ class KakaoChatFileParserServiceTest {
     }
 
     @Test
+    void parseFullTimestampCommaSenderFormat() {
+        KakaoChatParsedDocument response = parserService.parseDocument(file("""
+                윤상희 님과 카카오톡 대화
+                저장한 날짜 : 2026년 5월 23일 오전 2:29
+                
+                2026년 3월 5일 오후 3:34
+                2026년 3월 5일 오후 3:34, 노지섭 : 안녕하세요! 수은님 통해서 소개받은 노지섭입니다
+                2026년 3월 5일 오후 3:37, 윤상희 : 아 안녕하세요
+                2026년 3월 5일 오후 3:54, 노지섭 : 혹시 몇 년생이세요?
+                """));
+
+        assertThat(response.messages()).hasSize(3);
+        assertThat(response.messages().get(0).sender()).isEqualTo("노지섭");
+        assertThat(response.messages().get(0).date()).isEqualTo("2026-03-05");
+        assertThat(response.messages().get(0).timeText()).isEqualTo("오후 3:34");
+        assertThat(response.messages().get(0).dateTime()).isEqualTo("2026-03-05T15:34");
+        assertThat(response.messages().get(1).sender()).isEqualTo("윤상희");
+        assertThat(response.analysisText()).contains("윤상희: 아 안녕하세요");
+    }
+
+    @Test
     void buildAnalysisTextFromTextMessagesOnly() {
         KakaoChatParsedDocument response = parserService.parseDocument(file("""
                 K프로젝트 26-1 님과 카카오톡 대화

@@ -154,18 +154,6 @@ public class KakaoChatFileParserService {
 
             totalRelevantLines++;
 
-            Optional<LocalDate> dateSeparator = KakaoChatParsingUtils.parseDateSeparator(rawLine);
-            if (dateSeparator.isPresent()) {
-                if (currentMessage != null) {
-                    messages.add(currentMessage.toDto());
-                    currentMessage = null;
-                }
-                currentDate = dateSeparator.get();
-                dateSeparatorCount++;
-                parsedRelevantLines++;
-                continue;
-            }
-
             Optional<KakaoChatParsingUtils.ParsedMessageStart> messageStart =
                     KakaoChatParsingUtils.parseMessageStart(rawLine);
             if (messageStart.isPresent()) {
@@ -173,7 +161,9 @@ public class KakaoChatFileParserService {
                     messages.add(currentMessage.toDto());
                 }
 
-                LocalDate resolvedDate = currentDate;
+                LocalDate resolvedDate = messageStart.get().date() == null
+                        ? currentDate
+                        : messageStart.get().date();
                 if (resolvedDate == null && savedAtDate.isPresent()) {
                     resolvedDate = savedAtDate.get();
                     usedSavedAtDateFallback = true;
@@ -204,6 +194,18 @@ public class KakaoChatFileParserService {
                     unmatchedLineCount++;
                     continue;
                 }
+            }
+
+            Optional<LocalDate> dateSeparator = KakaoChatParsingUtils.parseDateSeparator(rawLine);
+            if (dateSeparator.isPresent()) {
+                if (currentMessage != null) {
+                    messages.add(currentMessage.toDto());
+                    currentMessage = null;
+                }
+                currentDate = dateSeparator.get();
+                dateSeparatorCount++;
+                parsedRelevantLines++;
+                continue;
             }
 
             if (currentMessage != null) {
