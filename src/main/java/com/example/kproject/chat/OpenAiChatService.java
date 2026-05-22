@@ -5,8 +5,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.JsonNode;
 
+import java.io.IOException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -23,30 +26,81 @@ public class OpenAiChatService {
         this.chatRepository = chatRepository;
     }
 
+    // [1] 기존 텍스트 전용 상담
     public String reply(String userMessage) {
-        // [1] 프롬프트 수정: 각 항목 뒤에 줄바꿈을 넣으라고 명시함
-        String developerPrompt =
-                "너는 연애 심리 분석 앱 '마인드컨트롤'의 독설 고수 상담사야.\n\n" +
-                        "[답변 규칙]\n" +
-                        "1. 역질문 절대 금지: 사용자가 답해야 하는 질문은 하지 마.\n" +
-                        "2. 3단 구조 고정: 반드시 아래 형식으로만 대답하고, 항목 사이에는 무조건 줄바꿈을 넣어.\n" +
-                        "💬 상황판단: [내용]\n" +
-                        "⚡ 실전솔루션: [내용]\n" +
-                        "💯 관계점수: [점수]\n" +
-                        "3. 말투: 친한 친구에게 말하는 반말. 'ㅋㅋ', 'ㅠ' 사용.\n" +
-                        "4. 제약 사항: 군더더기 없이 딱 위 세 줄로만 대답해.";
+        Map<String, Object> requestBody = Map.of(
+                "model", properties.model(),
+                "messages", List.of(
+                        Map.of("role", "developer", "content", getCommonPrompt()),
+                        Map.of("role", "user", "content", userMessage)
+                ),
+                "response_format", Map.of("type", "json_object") // ✨ JSON 강제 출력 설정 추가
+        );
+        return callOpenAi(requestBody, userMessage);
+    }
+
+    // [2] 이미지 + 텍스트 질문 상담 (리포트용)
+    public String replyWithImage(MultipartFile imageFile, String userMessage) throws IOException {
+        byte[] bytes = imageFile.getBytes();
+        String base64Image = Base64.getEncoder().encodeToString(bytes);
+
+        // 질문이 없으면 기본 분석 요청 멘트 사용
+        String finalUserMessage = StringUtils.hasText(userMessage) ? userMessage : "이 카톡 캡처 사진 보고 종합 분석 리포트 데이터 뽑아줘.";
 
         Map<String, Object> requestBody = Map.of(
                 "model", properties.model(),
-                "input", List.of(
-                        Map.of("role", "system", "content", List.of(Map.of("type", "input_text", "text", "너는 마인드컨트롤 서비스의 메인 AI야."))),
-                        Map.of("role", "developer", "content", List.of(Map.of("type", "input_text", "text", developerPrompt))),
-                        Map.of("role", "user", "content", List.of(Map.of("type", "input_text", "text", userMessage)))
-                )
+                "messages", List.of(
+                        Map.of("role", "developer", "content", getCommonPrompt()),
+                        Map.of("role", "user", "content", List.of(
+                                Map.of("type", "text", "text", finalUserMessage),
+                                Map.of("type", "image_url", "image_url",
+                                        Map.of("url", "data:image/jpeg;base64," + base64Image))
+                        ))
+                ),
+                "response_format", Map.of("type", "json_object") // ✨ JSON 강제 출력 설정 추가
         );
 
+        return callOpenAi(requestBody, "이미지 리포트 분석: " + finalUserMessage);
+    }
+
+    // ✨ 프론트 디자인 스펙에 맞춘 JSON 프롬프트 설정
+    private String getCommonPrompt() {
+        return "너는 연애 심리 분석 앱 '마인드컨트롤'의 전문 상담사야. 사용자의 카톡 대화를 분석하여 반드시 다음 JSON 형식으로만 응답해.\n" +
+                "[응답 규칙]\n" +
+                "1. 모든 텍스트는 한국어로 작성.\n" +
+                "2. 반드시 유효한 JSON 객체 하나만 반환 (마크다운 ```json 태그 포함 금지).\n" +
+                "\n" +
+                "[JSON 구조]\n" +
+                "{\n" +
+                "  \"overall_report\": { \"likability_index\": 0-100, \"summary_ment\": \"문자열\" },\n" +
+                "  \"relationship_dynamics\": {\n" +
+                "    \"chat_share\": { \"user\": 0-100, \"partner\": 0-100 },\n" +
+                "    \"avg_reply_time_minutes\": 정수,\n" +
+                "    \"language_sync_percent\": 0-100,\n" +
+                "    \"keywords\": [\"#키워드1\", \"#키워드2\", \"#키워드3\", \"#키워드4\"]\n" +
+                "  },\n" +
+                "  \"personality_analysis\": {\n" +
+                "    \"predicted_mbti\": \"MBTI타입\",\n" +
+                "    \"attachment_type\": \"안정형/불안형/회피형 중 선택\",\n" +
+                "    \"big_five_scores\": { \"extraversion\": 1-100, \"conscientiousness\": 1-100, \"agreeableness\": 1-100, \"neuroticism\": 1-100, \"openness\": 1-100 }\n" +
+                "  },\n" +
+                "  \"emotional_timeline\": [\n" +
+                "    { \"time_point\": \"초반\", \"emotion_score\": 1-100 },\n" +
+                "    { \"time_point\": \"중반\", \"emotion_score\": 1-100 },\n" +
+                "    { \"time_point\": \"후반\", \"emotion_score\": 1-100 }\n" +
+                "  ],\n" +
+                "  \"insights\": {\n" +
+                "    \"decisive_moment\": \"결정적 순간 설명 문자열\",\n" +
+                "    \"dating_tip\": \"실전 솔루션 문자열\",\n" +
+                "    \"caution_point\": \"주의할 점 문자열\"\n" +
+                "  }\n" +
+                "}";
+    }
+
+    // OpenAI API 호출 공통 로직
+    private String callOpenAi(Map<String, Object> requestBody, String logMessage) {
         JsonNode response = restClient.post()
-                .uri("/responses")
+                .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(requestBody)
                 .retrieve()
@@ -54,26 +108,14 @@ public class OpenAiChatService {
 
         if (response == null) throw new RestClientException("Response is empty");
 
-        String aiAnswer = response.path("output_text").asString();
+        // ✨ asString() 대신 asText()를 사용해야 JSON 문자열을 정확히 가져옵니다.
+        String aiAnswer = response.path("choices").get(0).path("message").path("content").asText();
 
-        if (!StringUtils.hasText(aiAnswer)) {
-            JsonNode outputNode = response.path("output");
-            if (outputNode.isArray() && outputNode.has(0)) {
-                aiAnswer = outputNode.get(0).path("content").get(0).path("text").asString();
-            }
-        }
-
-        // ✨ [핵심 수정] 줄바꿈 제거 로직을 삭제했습니다!
-        // 이제 AI가 보낸 \n이 그대로 전달되어 포스트맨에서 3줄로 보일 거예요.
         if (StringUtils.hasText(aiAnswer)) {
             aiAnswer = aiAnswer.trim();
-        }
-
-        if (StringUtils.hasText(aiAnswer)) {
-            chatRepository.save(new ChatHistory(userMessage, aiAnswer));
+            chatRepository.save(new ChatHistory(logMessage, aiAnswer));
             return aiAnswer;
         }
-
-        return "답변을 찾지 못했습니다.";
+        return "답변을 생성하지 못했습니다.";
     }
 }
