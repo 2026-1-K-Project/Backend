@@ -1,24 +1,18 @@
 package com.example.kproject.controller;
 
-import com.example.kproject.dto.report.ReportGenerateRequest;
 import com.example.kproject.dto.report.ReportDetailResponse;
 import com.example.kproject.dto.report.ReportInsightsResponse;
 import com.example.kproject.dto.report.ReportPersonalityResponse;
 import com.example.kproject.dto.report.ReportPreferencesResponse;
 import com.example.kproject.dto.report.ReportQuestionsResponse;
 import com.example.kproject.dto.report.ReportRelationshipResponse;
-import com.example.kproject.dto.report.ReportResponse;
 import com.example.kproject.dto.report.ReportSummaryResponse;
-import com.example.kproject.service.report.ReportGenerationService;
 import com.example.kproject.service.report.ReportSectionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,24 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/reports")
 public class ReportController {
 
-    private final ReportGenerationService reportGenerationService;
     private final ReportSectionQueryService reportSectionQueryService;
 
-    public ReportController(
-            ReportGenerationService reportGenerationService,
-            ReportSectionQueryService reportSectionQueryService
-    ) {
-        this.reportGenerationService = reportGenerationService;
+    public ReportController(ReportSectionQueryService reportSectionQueryService) {
         this.reportSectionQueryService = reportSectionQueryService;
-    }
-
-    @Operation(
-            summary = "종합 분석 리포트 생성",
-            description = "구조화된 대화 메시지와 분석 텍스트를 기반으로 프론트 UI에서 바로 사용할 수 있는 종합 분석 리포트를 생성합니다."
-    )
-    @PostMapping("/generate")
-    public ReportResponse generate(@Valid @RequestBody ReportGenerateRequest request) {
-        return reportGenerationService.generate(request);
     }
 
     @Operation(

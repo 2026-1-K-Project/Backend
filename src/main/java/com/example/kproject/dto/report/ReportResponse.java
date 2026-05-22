@@ -31,23 +31,6 @@ public record ReportResponse(
         @Schema(description = "실전 활용 인사이트")
         ActionableInsights actionableInsights
 ) {
-    public ReportResponse withReportId(Long reportId) {
-        return new ReportResponse(
-                reportId,
-                category,
-                analysisMode,
-                structuredParsingAvailable,
-                warning,
-                summary,
-                relationshipDynamics,
-                personalityPsychology,
-                qualitativeSignals,
-                emotionTimeline,
-                decisiveMoments,
-                actionableInsights
-        );
-    }
-
     @Schema(description = "상단 요약 정보")
     public record Summary(
             @Schema(description = "호감 지수", example = "62")

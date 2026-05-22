@@ -6,7 +6,6 @@ import com.example.kproject.dto.KakaoChatMessageDto;
 import com.example.kproject.dto.KakaoChatMetaDto;
 import com.example.kproject.dto.KakaoChatParseErrorDto;
 import com.example.kproject.dto.KakaoChatSpecialType;
-import com.example.kproject.dto.KakaoChatUploadResponse;
 import com.example.kproject.exception.ChatUploadException;
 import com.example.kproject.util.KakaoChatParsingUtils;
 import org.springframework.stereotype.Service;
@@ -26,10 +25,6 @@ import java.util.Optional;
 
 @Service
 public class KakaoChatFileParserService {
-
-    public KakaoChatUploadResponse parse(MultipartFile file) {
-        return parseDocument(file).toUploadResponse();
-    }
 
     public KakaoChatParsedDocument parseDocument(MultipartFile file) {
         validateFile(file);

@@ -51,29 +51,8 @@ public class ConversationReport {
     @Column(columnDefinition = "TEXT")
     private String warning;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String summaryJson;
-
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String fullReportJson;
-
     @Column(nullable = false)
     private LocalDateTime createdAt;
-
-    public ConversationReport(String category, String participantsJson, String summaryJson, String fullReportJson) {
-        this.category = category;
-        this.sourceType = ChatSourceType.TXT.name();
-        this.rawText = "";
-        this.normalizedJson = "{}";
-        this.participantsJson = participantsJson;
-        this.messageCount = 0;
-        this.status = ReportStatus.COMPLETED.name();
-        this.analysisMode = "STRUCTURED";
-        this.warning = null;
-        this.summaryJson = summaryJson;
-        this.fullReportJson = fullReportJson;
-        this.createdAt = LocalDateTime.now();
-    }
 
     public ConversationReport(
             String category,
@@ -95,13 +74,6 @@ public class ConversationReport {
         this.status = status.name();
         this.analysisMode = analysisMode;
         this.warning = warning;
-        this.summaryJson = "{}";
-        this.fullReportJson = "{}";
         this.createdAt = LocalDateTime.now();
-    }
-
-    public void updateStoredJson(String summaryJson, String fullReportJson) {
-        this.summaryJson = summaryJson;
-        this.fullReportJson = fullReportJson;
     }
 }

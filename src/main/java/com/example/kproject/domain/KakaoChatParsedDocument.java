@@ -3,7 +3,6 @@ package com.example.kproject.domain;
 import com.example.kproject.dto.KakaoChatMessageDto;
 import com.example.kproject.dto.KakaoChatMetaDto;
 import com.example.kproject.dto.KakaoChatParseErrorDto;
-import com.example.kproject.dto.KakaoChatUploadResponse;
 
 import java.util.List;
 
@@ -16,16 +15,6 @@ public record KakaoChatParsedDocument(
         List<KakaoChatParseErrorDto> errors,
         KakaoChatParsingStats parsingStats
 ) {
-    public KakaoChatUploadResponse toUploadResponse() {
-        return new KakaoChatUploadResponse(
-                meta,
-                messages.size(),
-                messages,
-                analysisText,
-                errors
-        );
-    }
-
     public boolean hasReadableText() {
         return rawText != null && !rawText.isBlank();
     }

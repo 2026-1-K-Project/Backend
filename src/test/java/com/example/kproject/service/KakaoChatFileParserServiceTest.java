@@ -1,7 +1,7 @@
 package com.example.kproject.service;
 
+import com.example.kproject.domain.KakaoChatParsedDocument;
 import com.example.kproject.dto.KakaoChatSpecialType;
-import com.example.kproject.dto.KakaoChatUploadResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -15,7 +15,7 @@ class KakaoChatFileParserServiceTest {
 
     @Test
     void parseSingleLineMessages() {
-        KakaoChatUploadResponse response = parserService.parse(file("""
+        KakaoChatParsedDocument response = parserService.parseDocument(file("""
                 K프로젝트 26-1 님과 카카오톡 대화
                 저장한 날짜 : 2026-04-29 18:13:04
                 --------------- 2026년 4월 6일 월요일 ---------------
@@ -26,7 +26,7 @@ class KakaoChatFileParserServiceTest {
         assertThat(response.meta().title()).isEqualTo("K프로젝트 26-1 님과 카카오톡 대화");
         assertThat(response.meta().savedAt()).isEqualTo("2026-04-29 18:13:04");
         assertThat(response.meta().roomName()).isEqualTo("K프로젝트 26-1");
-        assertThat(response.messageCount()).isEqualTo(2);
+        assertThat(response.messages()).hasSize(2);
         assertThat(response.messages().get(0).sender()).isEqualTo("노지섭");
         assertThat(response.messages().get(0).date()).isEqualTo("2026-04-06");
         assertThat(response.messages().get(0).timeText()).isEqualTo("오전 10:48");
@@ -36,7 +36,7 @@ class KakaoChatFileParserServiceTest {
 
     @Test
     void parseMultilineContinuationIncludingBlankLines() {
-        KakaoChatUploadResponse response = parserService.parse(file("""
+        KakaoChatParsedDocument response = parserService.parseDocument(file("""
                 K프로젝트 26-1 님과 카카오톡 대화
                 저장한 날짜 : 2026-04-29 18:13:04
                 --------------- 2026년 4월 6일 월요일 ---------------
@@ -53,7 +53,7 @@ class KakaoChatFileParserServiceTest {
 
     @Test
     void classifySpecialMessageTypes() {
-        KakaoChatUploadResponse response = parserService.parse(file("""
+        KakaoChatParsedDocument response = parserService.parseDocument(file("""
                 K프로젝트 26-1 님과 카카오톡 대화
                 저장한 날짜 : 2026-04-29 18:13:04
                 --------------- 2026년 4월 6일 월요일 ---------------
@@ -70,7 +70,7 @@ class KakaoChatFileParserServiceTest {
 
     @Test
     void applyUpdatedDateWhenDateSeparatorChanges() {
-        KakaoChatUploadResponse response = parserService.parse(file("""
+        KakaoChatParsedDocument response = parserService.parseDocument(file("""
                 K프로젝트 26-1 님과 카카오톡 대화
                 저장한 날짜 : 2026-04-29 18:13:04
                 --------------- 2026년 4월 6일 월요일 ---------------
@@ -87,7 +87,7 @@ class KakaoChatFileParserServiceTest {
 
     @Test
     void buildAnalysisTextFromTextMessagesOnly() {
-        KakaoChatUploadResponse response = parserService.parse(file("""
+        KakaoChatParsedDocument response = parserService.parseDocument(file("""
                 K프로젝트 26-1 님과 카카오톡 대화
                 저장한 날짜 : 2026-04-29 18:13:04
                 --------------- 2026년 4월 6일 월요일 ---------------
