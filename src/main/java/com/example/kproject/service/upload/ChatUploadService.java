@@ -7,13 +7,17 @@ import com.example.kproject.domain.NormalizedConversationResult;
 import com.example.kproject.dto.upload.ChatUploadResponse;
 import com.example.kproject.exception.ChatUploadException;
 import com.example.kproject.service.KakaoChatFileParserService;
+import com.example.kproject.service.normalize.AiConversationNormalizeService;
 import com.example.kproject.service.normalize.ConversationNormalizeService;
 import com.example.kproject.service.report.ReportStorageService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class ChatUploadService {
@@ -21,17 +25,20 @@ public class ChatUploadService {
     private static final String DEFAULT_CATEGORY = "일반 분석";
 
     private final KakaoChatFileParserService kakaoChatFileParserService;
+    private final AiConversationNormalizeService aiConversationNormalizeService;
     private final ConversationNormalizeService conversationNormalizeService;
     private final ImageTextExtractionService imageTextExtractionService;
     private final ReportStorageService reportStorageService;
 
     public ChatUploadService(
             KakaoChatFileParserService kakaoChatFileParserService,
+            AiConversationNormalizeService aiConversationNormalizeService,
             ConversationNormalizeService conversationNormalizeService,
             ImageTextExtractionService imageTextExtractionService,
             ReportStorageService reportStorageService
     ) {
         this.kakaoChatFileParserService = kakaoChatFileParserService;
+        this.aiConversationNormalizeService = aiConversationNormalizeService;
         this.conversationNormalizeService = conversationNormalizeService;
         this.imageTextExtractionService = imageTextExtractionService;
         this.reportStorageService = reportStorageService;
@@ -65,11 +72,24 @@ public class ChatUploadService {
     }
 
     private NormalizedConversationResult normalizeTxt(MultipartFile file, String targetName) {
+        String rawText = readFileAsText(file);
+        Optional<NormalizedConversationResult> aiResult =
+                aiConversationNormalizeService.normalizeText(rawText, targetName);
+        if (aiResult.isPresent()) {
+            return aiResult.get();
+        }
+
         KakaoChatParsedDocument parsedDocument = kakaoChatFileParserService.parseDocument(file);
         return conversationNormalizeService.normalize(parsedDocument, targetName);
     }
 
     private NormalizedConversationResult normalizeImage(MultipartFile file, String targetName) {
+        Optional<NormalizedConversationResult> aiResult =
+                aiConversationNormalizeService.normalizeImage(file, targetName);
+        if (aiResult.isPresent()) {
+            return aiResult.get();
+        }
+
         ImageTextExtractionService.ImageTextExtractionResult extractionResult = imageTextExtractionService.extract(file);
         return conversationNormalizeService.normalizeRawText(
                 extractionResult.rawText(),
@@ -93,5 +113,13 @@ public class ChatUploadService {
         }
 
         return ChatSourceType.TXT;
+    }
+
+    private String readFileAsText(MultipartFile file) {
+        try {
+            return new String(file.getBytes(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new ChatUploadException("업로드 파일을 텍스트로 읽을 수 없습니다.", exception);
+        }
     }
 }
