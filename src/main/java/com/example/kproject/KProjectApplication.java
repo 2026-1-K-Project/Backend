@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @OpenAPIDefinition(
         info = @Info(
                 title = "K프로젝트 대화 분석 API",
-                description = "카카오톡 txt 파일과 채팅 캡처 이미지를 업로드하고, reportId 기반 대화 분석 리포트를 조회하는 API 문서입니다.",
+                description = "txt, 이미지 등 비정형 대화 파일을 OpenAI로 정형화하고, reportId 기반 대화 분석 리포트를 조회하는 API 문서입니다.",
                 version = "v1"
         )
 )

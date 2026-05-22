@@ -51,6 +51,12 @@ public class ConversationReport {
     @Column(columnDefinition = "TEXT")
     private String warning;
 
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
+    private String summaryJson;
+
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
+    private String fullReportJson;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -74,6 +80,8 @@ public class ConversationReport {
         this.status = status.name();
         this.analysisMode = analysisMode;
         this.warning = warning;
+        this.summaryJson = "{}";
+        this.fullReportJson = "{}";
         this.createdAt = LocalDateTime.now();
     }
 }

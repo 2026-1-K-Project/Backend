@@ -27,6 +27,9 @@ public class ReportSchemaMaintenanceService implements ApplicationRunner {
         try {
             jdbcTemplate.execute("ALTER TABLE reports MODIFY raw_text LONGTEXT NOT NULL");
             jdbcTemplate.execute("ALTER TABLE reports MODIFY normalized_json LONGTEXT NOT NULL");
+            jdbcTemplate.execute("ALTER TABLE reports MODIFY participants_json LONGTEXT NOT NULL");
+            jdbcTemplate.execute("ALTER TABLE reports MODIFY summary_json LONGTEXT NOT NULL");
+            jdbcTemplate.execute("ALTER TABLE reports MODIFY full_report_json LONGTEXT NOT NULL");
         } catch (Exception exception) {
             log.debug("Skipping reports text column maintenance: {}", exception.getMessage());
         }
