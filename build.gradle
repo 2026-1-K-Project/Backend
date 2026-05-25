@@ -29,8 +29,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     // JPA/Hibernate 기반 DB 연동, Entity/Repository 사용, 분석 기록 저장/조회용
 
-    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
-    // MariaDB 연결 드라이버, 실제 DB 접속에 필요
+    runtimeOnly 'org.postgresql:postgresql'
+    // Supabase(PostgreSQL) 연결 드라이버, 실제 DB 접속에 필요
 
     compileOnly 'org.projectlombok:lombok'
     // Getter, Setter, Constructor 등 반복 코드 줄이기

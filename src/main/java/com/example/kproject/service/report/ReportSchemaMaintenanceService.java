@@ -25,11 +25,11 @@ public class ReportSchemaMaintenanceService implements ApplicationRunner {
 
     private void widenReportTextColumns() {
         try {
-            jdbcTemplate.execute("ALTER TABLE reports MODIFY raw_text LONGTEXT NOT NULL");
-            jdbcTemplate.execute("ALTER TABLE reports MODIFY normalized_json LONGTEXT NOT NULL");
-            jdbcTemplate.execute("ALTER TABLE reports MODIFY participants_json LONGTEXT NOT NULL");
-            jdbcTemplate.execute("ALTER TABLE reports MODIFY summary_json LONGTEXT NOT NULL");
-            jdbcTemplate.execute("ALTER TABLE reports MODIFY full_report_json LONGTEXT NOT NULL");
+            jdbcTemplate.execute("ALTER TABLE reports ALTER COLUMN raw_text TYPE TEXT");
+            jdbcTemplate.execute("ALTER TABLE reports ALTER COLUMN normalized_json TYPE TEXT");
+            jdbcTemplate.execute("ALTER TABLE reports ALTER COLUMN participants_json TYPE TEXT");
+            jdbcTemplate.execute("ALTER TABLE reports ALTER COLUMN summary_json TYPE TEXT");
+            jdbcTemplate.execute("ALTER TABLE reports ALTER COLUMN full_report_json TYPE TEXT");
         } catch (Exception exception) {
             log.debug("Skipping reports text column maintenance: {}", exception.getMessage());
         }
