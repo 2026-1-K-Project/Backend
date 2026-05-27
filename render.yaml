@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: backend-o2w3
+    runtime: java
+    plan: free
+    region: singapore
+    buildCommand: ./gradlew --no-daemon clean bootJar -x test
+    startCommand: java -jar build/libs/*.jar
+    envVars:
+      - key: JAVA_VERSION
+        value: 21
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false
