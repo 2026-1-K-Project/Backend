@@ -4,7 +4,7 @@ services:
     runtime: java
     plan: free
     region: singapore
-    buildCommand: ./gradlew --no-daemon clean bootJar -x test
+    buildCommand: chmod +x ./gradlew && ./gradlew --no-daemon clean bootJar -x test
     startCommand: java -jar build/libs/*.jar
     envVars:
       - key: JAVA_VERSION
