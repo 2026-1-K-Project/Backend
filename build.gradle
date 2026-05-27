@@ -52,6 +52,8 @@ dependencies {
 
     testAnnotationProcessor 'org.projectlombok:lombok'
     // 테스트 코드의 Lombok 어노테이션 처리
+
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
 }
 
 tasks.named('test') {
