@@ -1,14 +1,10 @@
 services:
   - type: web
     name: backend-o2w3
-    runtime: java
+    runtime: docker
     plan: free
     region: singapore
-    buildCommand: chmod +x ./gradlew && ./gradlew --no-daemon clean bootJar -x test
-    startCommand: java -jar build/libs/*.jar
     envVars:
-      - key: JAVA_VERSION
-        value: 21
       - key: DB_URL
         sync: false
       - key: DB_USERNAME
