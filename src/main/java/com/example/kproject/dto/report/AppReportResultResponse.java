@@ -23,7 +23,8 @@ public record AppReportResultResponse(
         List<String> evidence,
         List<String> riskSignals,
         List<String> recommendedQuestions,
-        List<String> recommendedReplies
+        List<String> recommendedReplies,
+        AiDeepAnalysisResponse aiDeepAnalysis
 ) {
     public record BigFive(
             int openness,
