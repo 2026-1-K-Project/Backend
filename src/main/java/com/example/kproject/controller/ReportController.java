@@ -3,19 +3,28 @@ package com.example.kproject.controller;
 import com.example.kproject.dto.report.AppReportResultResponse;
 import com.example.kproject.dto.report.ReportDetailResponse;
 import com.example.kproject.dto.report.ReportInsightsResponse;
+import com.example.kproject.dto.report.ReportListItemResponse;
 import com.example.kproject.dto.report.ReportPersonalityResponse;
 import com.example.kproject.dto.report.ReportPreferencesResponse;
 import com.example.kproject.dto.report.ReportQuestionsResponse;
 import com.example.kproject.dto.report.ReportRelationshipResponse;
+import com.example.kproject.dto.report.ReportStatusResponse;
 import com.example.kproject.dto.report.ReportSummaryResponse;
 import com.example.kproject.service.report.ReportSectionQueryService;
+import com.example.kproject.service.report.ReportStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Tag(name = "리포트", description = "대화 분석 리포트 API")
 @RestController
@@ -23,9 +32,38 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReportController {
 
     private final ReportSectionQueryService reportSectionQueryService;
+    private final ReportStorageService reportStorageService;
 
-    public ReportController(ReportSectionQueryService reportSectionQueryService) {
+    public ReportController(
+            ReportSectionQueryService reportSectionQueryService,
+            ReportStorageService reportStorageService
+    ) {
         this.reportSectionQueryService = reportSectionQueryService;
+        this.reportStorageService = reportStorageService;
+    }
+
+    @Operation(
+            summary = "보관함 리포트 목록 조회",
+            description = "삭제되지 않은 리포트를 최신순으로 조회합니다. memberId가 있으면 해당 사용자 리포트만, 없으면 게스트 리포트만 조회합니다."
+    )
+    @GetMapping
+    public List<ReportListItemResponse> listReports(
+            @Parameter(description = "로그인 사용자 memberId. 없으면 게스트 리포트만 조회합니다.", example = "1")
+            @RequestParam(value = "memberId", required = false) Long memberId
+    ) {
+        return reportStorageService.listReports(memberId, false);
+    }
+
+    @Operation(
+            summary = "휴지통 리포트 목록 조회",
+            description = "휴지통으로 이동된 리포트를 최신순으로 조회합니다. memberId가 있으면 해당 사용자 리포트만, 없으면 게스트 리포트만 조회합니다."
+    )
+    @GetMapping("/trash")
+    public List<ReportListItemResponse> listTrash(
+            @Parameter(description = "로그인 사용자 memberId. 없으면 게스트 휴지통만 조회합니다.", example = "1")
+            @RequestParam(value = "memberId", required = false) Long memberId
+    ) {
+        return reportStorageService.listReports(memberId, true);
     }
 
     @Operation(
@@ -38,6 +76,18 @@ public class ReportController {
             @PathVariable Long reportId
     ) {
         return reportSectionQueryService.getDetail(reportId);
+    }
+
+    @Operation(
+            summary = "리포트 처리 상태 조회",
+            description = "분석 화면에서 사용할 처리 상태와 진행률을 조회합니다."
+    )
+    @GetMapping("/{reportId}/status")
+    public ReportStatusResponse getStatus(
+            @Parameter(description = "상태를 조회할 리포트 ID", required = true)
+            @PathVariable Long reportId
+    ) {
+        return reportStorageService.getStatus(reportId);
     }
 
     @Operation(
@@ -123,5 +173,43 @@ public class ReportController {
             @PathVariable Long reportId
     ) {
         return reportSectionQueryService.getAppResult(reportId);
+    }
+
+    @Operation(summary = "리포트를 휴지통으로 이동")
+    @PatchMapping("/{reportId}/trash")
+    public ReportListItemResponse moveToTrash(
+            @Parameter(description = "휴지통으로 이동할 리포트 ID", required = true)
+            @PathVariable Long reportId
+    ) {
+        return reportStorageService.moveToTrash(reportId);
+    }
+
+    @Operation(summary = "휴지통 리포트 복원")
+    @PatchMapping("/{reportId}/restore")
+    public ReportListItemResponse restore(
+            @Parameter(description = "복원할 리포트 ID", required = true)
+            @PathVariable Long reportId
+    ) {
+        return reportStorageService.restore(reportId);
+    }
+
+    @Operation(summary = "리포트 영구 삭제")
+    @DeleteMapping("/{reportId}")
+    public ResponseEntity<Void> deleteReport(
+            @Parameter(description = "삭제할 리포트 ID", required = true)
+            @PathVariable Long reportId
+    ) {
+        reportStorageService.deleteReport(reportId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "휴지통 비우기")
+    @DeleteMapping("/trash")
+    public ResponseEntity<Void> emptyTrash(
+            @Parameter(description = "로그인 사용자 memberId. 없으면 게스트 휴지통만 비웁니다.", example = "1")
+            @RequestParam(value = "memberId", required = false) Long memberId
+    ) {
+        reportStorageService.emptyTrash(memberId);
+        return ResponseEntity.noContent().build();
     }
 }

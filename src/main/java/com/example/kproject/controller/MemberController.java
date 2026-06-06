@@ -1,9 +1,9 @@
 package com.example.kproject.controller;
 
+import com.example.kproject.dto.AuthResponse;
 import com.example.kproject.dto.LoginRequest;
 import com.example.kproject.dto.SignUpRequest;
 import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,14 +17,12 @@ public class MemberController {
     }
 
     @PostMapping("/signup")
-    public ResponseEntity<String> signUp(@Valid @RequestBody SignUpRequest request) {
-        memberService.signUp(request);
-        return ResponseEntity.ok("회원가입이 완료되었습니다.");
+    public AuthResponse signUp(@Valid @RequestBody SignUpRequest request) {
+        return memberService.signUp(request);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@Valid @RequestBody LoginRequest request) {
-        String email = memberService.login(request);
-        return ResponseEntity.ok(email + " 로그인 성공");
+    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+        return memberService.login(request);
     }
 }

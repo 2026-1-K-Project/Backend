@@ -2,6 +2,7 @@ package com.example.kproject.controller; // 또는 적절한 서비스 패키지
 
 import com.example.kproject.domain.Member;
 import com.example.kproject.domain.MemberRepository;
+import com.example.kproject.dto.AuthResponse;
 import com.example.kproject.dto.LoginRequest;
 import com.example.kproject.dto.SignUpRequest;
 import org.springframework.stereotype.Service;
@@ -18,17 +19,18 @@ public class MemberService {
     }
 
     @Transactional
-    public Long signUp(SignUpRequest request) {
+    public AuthResponse signUp(SignUpRequest request) {
         memberRepository.findByEmail(request.email())
                 .ifPresent(m -> {
                     throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
                 });
 
         Member member = new Member(request.email(), request.password(), request.name());
-        return memberRepository.save(member).getId();
+        Member saved = memberRepository.save(member);
+        return toResponse(saved, "회원가입이 완료되었습니다.");
     }
 
-    public String login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request) {
         Member member = memberRepository.findByEmail(request.email())
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
@@ -36,6 +38,21 @@ public class MemberService {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
-        return member.getEmail();
+        return toResponse(member, "로그인 성공");
+    }
+
+    public AuthResponse getMember(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        return toResponse(member, "회원 조회 성공");
+    }
+
+    private AuthResponse toResponse(Member member, String message) {
+        return new AuthResponse(
+                member.getId(),
+                member.getEmail(),
+                member.getName(),
+                message
+        );
     }
 }
