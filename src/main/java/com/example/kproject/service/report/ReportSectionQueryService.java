@@ -153,7 +153,12 @@ public class ReportSectionQueryService {
                 decisiveMoment == null ? summary.headline() : decisiveMoment.description(),
                 firstOrDefault(insights.tips(), "상대방의 반응이 좋았던 주제를 자연스럽게 이어가 보세요."),
                 firstOrDefault(insights.warnings(), report.getWarning()),
-                report.getDescription()
+                report.getDescription(),
+                analysisSummary(summary, relationship, personality, insights),
+                evidence(summary, relationship, insights, report.getMessageCount()),
+                riskSignals(relationship, insights, report.getMessageCount()),
+                safeList(insights.recommendedQuestions()),
+                safeList(insights.recommendedReplies())
         );
     }
 
@@ -437,7 +442,126 @@ public class ReportSectionQueryService {
     }
 
     private List<String> safeList(List<String> values) {
-        return values == null ? List.of() : values;
+        return values == null ? List.of() : values.stream()
+                .filter(StringUtils::hasText)
+                .toList();
+    }
+
+    private String analysisSummary(
+            ReportSummaryResponse summary,
+            ReportRelationshipResponse relationship,
+            ReportPersonalityResponse personality,
+            ReportInsightsResponse insights
+    ) {
+        List<String> parts = new ArrayList<>();
+        parts.add(StringUtils.hasText(summary.headline())
+                ? summary.headline()
+                : scoreSummary(relationship.interestScore()));
+
+        if (StringUtils.hasText(personality.counterpartyTendency())) {
+            parts.add("상대방 성향: " + personality.counterpartyTendency());
+        }
+
+        String firstTip = firstOrDefault(insights.tips(), "");
+        if (StringUtils.hasText(firstTip)) {
+            parts.add("추천 방향: " + firstTip);
+        }
+
+        return String.join(" ", parts);
+    }
+
+    private List<String> evidence(
+            ReportSummaryResponse summary,
+            ReportRelationshipResponse relationship,
+            ReportInsightsResponse insights,
+            int messageCount
+    ) {
+        List<String> evidence = new ArrayList<>();
+        evidence.add(scoreEvidence(relationship.interestScore()));
+
+        if (relationship.talkRatio() != null) {
+            int gap = Math.abs(relationship.talkRatio().me() - relationship.talkRatio().other());
+            if (gap <= 20) {
+                evidence.add("대화 비율이 크게 한쪽으로 쏠리지 않아 상호작용 균형이 비교적 좋습니다.");
+            } else {
+                evidence.add("대화 비율 차이가 커서 한쪽이 대화를 더 많이 끌고 가는 흐름이 보입니다.");
+            }
+        }
+
+        if (relationship.languageSync() >= 70) {
+            evidence.add("표현 방식과 대화 리듬이 비슷하게 맞는 구간이 많아 대화 싱크가 높게 잡혔습니다.");
+        } else if (relationship.languageSync() <= 40) {
+            evidence.add("대화 싱크가 낮아 서로의 말투나 반응 속도가 아직 충분히 맞지 않는 편입니다.");
+        }
+
+        if (relationship.averageReplyMinutes() > 0) {
+            evidence.add("평균 답장 속도는 " + replyTimeText(relationship.averageReplyMinutes()) + "로 계산됐습니다.");
+        }
+        if (messageCount > 0) {
+            evidence.add("분석에 사용된 메시지는 총 " + messageCount + "개입니다.");
+        }
+
+        List<String> keywords = safeList(summary.keywords());
+        if (!keywords.isEmpty()) {
+            evidence.add("반복적으로 드러난 핵심 키워드: " + String.join(", ", keywords.stream().limit(5).toList()));
+        }
+
+        ReportResponse.DecisiveMoment moment = firstOrNull(insights.decisiveMoments());
+        if (moment != null && StringUtils.hasText(moment.description())) {
+            evidence.add("결정적 장면: " + moment.description());
+        }
+
+        return evidence.stream().distinct().limit(7).toList();
+    }
+
+    private List<String> riskSignals(
+            ReportRelationshipResponse relationship,
+            ReportInsightsResponse insights,
+            int messageCount
+    ) {
+        List<String> risks = new ArrayList<>(safeList(insights.warnings()));
+        if (relationship.interestScore() < 45) {
+            risks.add("관계 지수가 낮아 아직 확신을 전제로 한 표현은 부담이 될 수 있습니다.");
+        }
+        if (relationship.averageReplyMinutes() >= 180) {
+            risks.add("평균 답장 간격이 긴 편이라 빠른 관계 진전보다 자연스러운 템포 조절이 필요합니다.");
+        }
+        if (relationship.languageSync() <= 35) {
+            risks.add("대화 싱크가 낮아 상대의 말투와 관심사에 맞춘 질문이 필요합니다.");
+        }
+        if (messageCount > 0 && messageCount < 20) {
+            risks.add("대화량이 아직 적어 결과를 단정하기보다는 참고 지표로 보는 것이 좋습니다.");
+        }
+        if (risks.isEmpty()) {
+            risks.add("큰 위험 신호는 적지만, 과한 확신 표현보다는 가벼운 제안부터 이어가는 편이 안전합니다.");
+        }
+        return risks.stream().distinct().limit(5).toList();
+    }
+
+    private String scoreSummary(int interestScore) {
+        if (interestScore >= 80) {
+            return "관심 신호가 뚜렷하고 대화를 이어가려는 흐름이 강하게 나타납니다.";
+        }
+        if (interestScore >= 65) {
+            return "긍정적인 신호가 있지만 확신보다 자연스러운 관계 진전이 더 적합합니다.";
+        }
+        if (interestScore >= 45) {
+            return "대화는 이어지고 있으나 호감 신호는 아직 혼재되어 있습니다.";
+        }
+        return "현재 대화만으로는 호감 신호가 약하므로 신중한 접근이 필요합니다.";
+    }
+
+    private String scoreEvidence(int interestScore) {
+        if (interestScore >= 80) {
+            return "관계 지수가 " + interestScore + "%로 높아 질문, 반응, 대화 지속성에서 긍정 신호가 우세합니다.";
+        }
+        if (interestScore >= 65) {
+            return "관계 지수가 " + interestScore + "%로 긍정적이지만 아직 확정적인 단계는 아닙니다.";
+        }
+        if (interestScore >= 45) {
+            return "관계 지수가 " + interestScore + "%로 중간 수준이라 긍정/소극 신호가 함께 보입니다.";
+        }
+        return "관계 지수가 " + interestScore + "%로 낮아 현재 대화에서는 적극적인 관심 신호가 제한적입니다.";
     }
 
     private String replyTimeText(int averageReplyMinutes) {

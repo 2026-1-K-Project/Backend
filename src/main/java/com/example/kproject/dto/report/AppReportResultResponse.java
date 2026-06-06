@@ -18,7 +18,12 @@ public record AppReportResultResponse(
         String moment,
         String tips,
         String warning,
-        String description
+        String description,
+        String analysisSummary,
+        List<String> evidence,
+        List<String> riskSignals,
+        List<String> recommendedQuestions,
+        List<String> recommendedReplies
 ) {
     public record BigFive(
             int openness,
