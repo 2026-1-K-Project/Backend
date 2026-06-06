@@ -132,6 +132,50 @@ class ChatUploadServiceTest {
         assertThat(captor.getValue().getNormalizedJson()).contains("AI가 정형화한 메시지");
     }
 
+    @Test
+    void createMixedReportAfterBatchUpload() throws Exception {
+        ConversationReportRepository repository = mockRepositoryWithId(5L);
+        AiConversationNormalizeService aiNormalizer = Mockito.mock(AiConversationNormalizeService.class);
+        Mockito.when(aiNormalizer.normalizeFiles(any(), any(), any()))
+                .thenReturn(Optional.of(new NormalizedConversationResult(
+                        new NormalizedConversationDto(
+                                List.of("사용자", "상대방"),
+                                List.of(new NormalizedConversationDto.MessageDto(
+                                        "상대방",
+                                        "2026-04-29T10:48:00",
+                                        "여러 파일에서 정형화한 메시지",
+                                        "TEXT"
+                                )),
+                                List.of("정형화"),
+                                "batch raw text"
+                        ),
+                        ReportAnalysisMode.STRUCTURED,
+                        true,
+                        "OpenAI를 사용해 여러 업로드 파일을 정형화했습니다."
+                )));
+        ChatUploadService service = buildService(repository, aiNormalizer);
+
+        ChatUploadResponse response = service.uploadBatch(
+                List.of(
+                        file("chat.txt", "text/plain", "카카오톡 txt 내용"),
+                        file("capture.png", "image/png", "fake-image-binary")
+                ),
+                "썸",
+                "상대방",
+                "호감 신호가 있는지 분석해줘"
+        );
+
+        ArgumentCaptor<ConversationReport> captor = ArgumentCaptor.forClass(ConversationReport.class);
+        Mockito.verify(repository).save(captor.capture());
+
+        assertThat(response.reportId()).isEqualTo(5L);
+        assertThat(response.analysisMode()).isEqualTo(ReportAnalysisMode.STRUCTURED);
+        assertThat(captor.getValue().getSourceType()).isEqualTo("MIXED");
+        assertThat(captor.getValue().getUploadedFileCount()).isEqualTo(2);
+        assertThat(captor.getValue().getDescription()).contains("호감 신호");
+        assertThat(captor.getValue().getNormalizedJson()).contains("여러 파일에서 정형화한 메시지");
+    }
+
     private ChatUploadService buildService(ConversationReportRepository repository) {
         return buildService(repository, new EmptyAiConversationNormalizeService());
     }

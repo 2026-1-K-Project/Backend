@@ -1,5 +1,6 @@
 package com.example.kproject.controller;
 
+import com.example.kproject.dto.report.AppReportResultResponse;
 import com.example.kproject.dto.report.ReportDetailResponse;
 import com.example.kproject.dto.report.ReportInsightsResponse;
 import com.example.kproject.dto.report.ReportPersonalityResponse;
@@ -110,5 +111,17 @@ public class ReportController {
     ) {
         ReportInsightsResponse insights = reportSectionQueryService.getInsights(reportId);
         return new ReportQuestionsResponse(reportId, insights.recommendedQuestions());
+    }
+
+    @Operation(
+            summary = "앱용 통합 결과 조회",
+            description = "React Native 결과 화면의 AnalysisData 구조에 맞춰 주요 분석 값을 한 번에 조회합니다."
+    )
+    @GetMapping("/{reportId}/app-result")
+    public AppReportResultResponse getAppResult(
+            @Parameter(description = "앱용 결과를 조회할 리포트 ID", required = true)
+            @PathVariable Long reportId
+    ) {
+        return reportSectionQueryService.getAppResult(reportId);
     }
 }

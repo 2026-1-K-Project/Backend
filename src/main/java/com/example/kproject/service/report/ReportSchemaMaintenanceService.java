@@ -21,6 +21,7 @@ public class ReportSchemaMaintenanceService implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         widenReportTextColumns();
+        addUploadMetadataColumns();
     }
 
     private void widenReportTextColumns() {
@@ -32,6 +33,15 @@ public class ReportSchemaMaintenanceService implements ApplicationRunner {
             jdbcTemplate.execute("ALTER TABLE reports ALTER COLUMN full_report_json TYPE TEXT");
         } catch (Exception exception) {
             log.debug("Skipping reports text column maintenance: {}", exception.getMessage());
+        }
+    }
+
+    private void addUploadMetadataColumns() {
+        try {
+            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT");
+            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS uploaded_file_count INTEGER NOT NULL DEFAULT 1");
+        } catch (Exception exception) {
+            log.debug("Skipping reports upload metadata column maintenance: {}", exception.getMessage());
         }
     }
 }

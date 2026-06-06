@@ -48,6 +48,12 @@ public class ConversationReport {
     @Column(columnDefinition = "TEXT")
     private String warning;
 
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(nullable = false)
+    private int uploadedFileCount;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String summaryJson;
 
@@ -68,6 +74,22 @@ public class ConversationReport {
             String analysisMode,
             String warning
     ) {
+        this(category, sourceType, rawText, normalizedJson, participantsJson, messageCount, status, analysisMode, warning, null, 1);
+    }
+
+    public ConversationReport(
+            String category,
+            ChatSourceType sourceType,
+            String rawText,
+            String normalizedJson,
+            String participantsJson,
+            int messageCount,
+            ReportStatus status,
+            String analysisMode,
+            String warning,
+            String description,
+            int uploadedFileCount
+    ) {
         this.category = category;
         this.sourceType = sourceType.name();
         this.rawText = rawText == null ? "" : rawText;
@@ -77,6 +99,8 @@ public class ConversationReport {
         this.status = status.name();
         this.analysisMode = analysisMode;
         this.warning = warning;
+        this.description = description == null ? "" : description;
+        this.uploadedFileCount = Math.max(uploadedFileCount, 1);
         this.summaryJson = "{}";
         this.fullReportJson = "{}";
         this.createdAt = LocalDateTime.now();
