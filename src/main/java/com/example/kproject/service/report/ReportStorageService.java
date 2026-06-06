@@ -32,6 +32,16 @@ public class ReportStorageService {
             ChatSourceType sourceType,
             NormalizedConversationResult normalizedResult
     ) {
+        return createReport(category, sourceType, normalizedResult, null, 1);
+    }
+
+    public ConversationReport createReport(
+            String category,
+            ChatSourceType sourceType,
+            NormalizedConversationResult normalizedResult,
+            String description,
+            int uploadedFileCount
+    ) {
         try {
             NormalizedConversationDto conversation = normalizedResult.conversation();
             String participantsJson = objectMapper.writeValueAsString(conversation.participants());
@@ -45,7 +55,9 @@ public class ReportStorageService {
                     conversation.messages().size(),
                     ReportStatus.COMPLETED,
                     normalizedResult.analysisMode().name(),
-                    normalizedResult.warning()
+                    normalizedResult.warning(),
+                    description,
+                    uploadedFileCount
             ));
         } catch (Exception exception) {
             throw new ReportGenerationException(

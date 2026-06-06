@@ -6,6 +6,7 @@ import com.example.kproject.domain.ConversationReport;
 import com.example.kproject.domain.ReportAnalysisContext;
 import com.example.kproject.domain.ReportMessage;
 import com.example.kproject.dto.normalize.NormalizedConversationDto;
+import com.example.kproject.dto.report.AppReportResultResponse;
 import com.example.kproject.dto.report.ReportAnalysisMode;
 import com.example.kproject.dto.report.ReportDetailResponse;
 import com.example.kproject.dto.report.ReportInsightsResponse;
@@ -126,6 +127,34 @@ public class ReportSectionQueryService {
     public ReportInsightsResponse getInsights(Long reportId) {
         ConversationReport report = reportStorageService.getReport(reportId);
         return getOrCreate(report, AnalysisType.INSIGHTS, ReportInsightsResponse.class, () -> buildInsights(report));
+    }
+
+    public AppReportResultResponse getAppResult(Long reportId) {
+        ConversationReport report = reportStorageService.getReport(reportId);
+        ReportSummaryResponse summary = getSummary(reportId);
+        ReportRelationshipResponse relationship = getRelationship(reportId);
+        ReportPersonalityResponse personality = getPersonality(reportId);
+        ReportInsightsResponse insights = getInsights(reportId);
+
+        ReportResponse.DecisiveMoment decisiveMoment = firstOrNull(insights.decisiveMoments());
+        return new AppReportResultResponse(
+                String.valueOf(report.getId()),
+                report.getCategory() + " 분석 리포트",
+                report.getCreatedAt().toLocalDate().toString(),
+                relationship.interestScore(),
+                relationship.talkRatio() == null ? 50 : relationship.talkRatio().me(),
+                relationship.talkRatio() == null ? 50 : relationship.talkRatio().other(),
+                replyTimeText(relationship.averageReplyMinutes()),
+                relationship.languageSync(),
+                safeList(summary.keywords()).isEmpty() ? safeList(relationship.keywords()) : safeList(summary.keywords()),
+                personality.mbti() == null ? "분석중" : personality.mbti().type(),
+                personality.attachmentType() == null ? "분석중" : personality.attachmentType().type(),
+                toAppBigFive(personality.bigFive()),
+                decisiveMoment == null ? summary.headline() : decisiveMoment.description(),
+                firstOrDefault(insights.tips(), "상대방의 반응이 좋았던 주제를 자연스럽게 이어가 보세요."),
+                firstOrDefault(insights.warnings(), report.getWarning()),
+                report.getDescription()
+        );
     }
 
     private ReportSummaryResponse buildSummary(ConversationReport report) {
@@ -377,6 +406,50 @@ public class ReportSectionQueryService {
 
     private String fallbackOtherParticipant(List<String> participants) {
         return participants.size() > 1 ? participants.get(1) : "상대방";
+    }
+
+    private AppReportResultResponse.BigFive toAppBigFive(ReportResponse.BigFive bigFive) {
+        if (bigFive == null) {
+            return new AppReportResultResponse.BigFive(50, 50, 50, 50, 50);
+        }
+        return new AppReportResultResponse.BigFive(
+                bigFive.openness(),
+                bigFive.conscientiousness(),
+                bigFive.extraversion(),
+                bigFive.agreeableness(),
+                bigFive.neuroticism()
+        );
+    }
+
+    private ReportResponse.DecisiveMoment firstOrNull(List<ReportResponse.DecisiveMoment> moments) {
+        return moments == null || moments.isEmpty() ? null : moments.get(0);
+    }
+
+    private String firstOrDefault(List<String> values, String fallback) {
+        if (values != null) {
+            for (String value : values) {
+                if (StringUtils.hasText(value)) {
+                    return value;
+                }
+            }
+        }
+        return StringUtils.hasText(fallback) ? fallback : "";
+    }
+
+    private List<String> safeList(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private String replyTimeText(int averageReplyMinutes) {
+        if (averageReplyMinutes <= 0) {
+            return "분석중";
+        }
+        if (averageReplyMinutes < 60) {
+            return averageReplyMinutes + "분";
+        }
+        int hours = averageReplyMinutes / 60;
+        int minutes = averageReplyMinutes % 60;
+        return minutes == 0 ? hours + "시간" : hours + "시간 " + minutes + "분";
     }
 
     private String headline(int interestScore, String relationshipSummary) {

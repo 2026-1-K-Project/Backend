@@ -16,6 +16,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -45,6 +47,10 @@ public class ChatUploadService {
     }
 
     public ChatUploadResponse upload(MultipartFile file, String category, String targetName) {
+        return upload(file, category, targetName, null);
+    }
+
+    public ChatUploadResponse upload(MultipartFile file, String category, String targetName, String description) {
         if (file == null || file.isEmpty()) {
             throw new ChatUploadException("업로드할 대화 파일이 필요합니다.");
         }
@@ -54,12 +60,15 @@ public class ChatUploadService {
         NormalizedConversationResult normalizedResult = switch (sourceType) {
             case TXT -> normalizeTxt(file, targetName);
             case IMAGE -> normalizeImage(file, targetName);
+            case MIXED -> throw new ChatUploadException("단일 파일 업로드에서는 MIXED sourceType을 사용할 수 없습니다.");
         };
 
         ConversationReport report = reportStorageService.createReport(
                 resolvedCategory,
                 sourceType,
-                normalizedResult
+                normalizedResult,
+                description,
+                1
         );
 
         return new ChatUploadResponse(
@@ -67,6 +76,47 @@ public class ChatUploadService {
                 report.getStatus(),
                 normalizedResult.analysisMode(),
                 "대화 업로드 및 정형화가 완료되었습니다.",
+                normalizedResult.warning()
+        );
+    }
+
+    public ChatUploadResponse uploadBatch(
+            List<MultipartFile> files,
+            String category,
+            String targetName,
+            String description
+    ) {
+        List<MultipartFile> validFiles = files == null ? List.of() : files.stream()
+                .filter(file -> file != null && !file.isEmpty())
+                .toList();
+        if (validFiles.isEmpty()) {
+            throw new ChatUploadException("업로드할 대화 파일이 필요합니다.");
+        }
+
+        String resolvedCategory = StringUtils.hasText(category) ? category.trim() : DEFAULT_CATEGORY;
+        ChatSourceType sourceType = detectBatchSourceType(validFiles);
+        NormalizedConversationResult normalizedResult =
+                validFiles.size() == 1 && sourceType != ChatSourceType.MIXED
+                        ? switch (sourceType) {
+                            case TXT -> normalizeTxt(validFiles.get(0), targetName);
+                            case IMAGE -> normalizeImage(validFiles.get(0), targetName);
+                            case MIXED -> normalizeFiles(validFiles, targetName, description);
+                        }
+                        : normalizeFiles(validFiles, targetName, description);
+
+        ConversationReport report = reportStorageService.createReport(
+                resolvedCategory,
+                sourceType,
+                normalizedResult,
+                description,
+                validFiles.size()
+        );
+
+        return new ChatUploadResponse(
+                report.getId(),
+                report.getStatus(),
+                normalizedResult.analysisMode(),
+                "대화 파일 묶음 업로드 및 정형화가 완료되었습니다.",
                 normalizedResult.warning()
         );
     }
@@ -98,6 +148,44 @@ public class ChatUploadService {
         );
     }
 
+    private NormalizedConversationResult normalizeFiles(List<MultipartFile> files, String targetName, String description) {
+        Optional<NormalizedConversationResult> aiResult =
+                aiConversationNormalizeService.normalizeFiles(files, targetName, description);
+        if (aiResult.isPresent()) {
+            return aiResult.get();
+        }
+
+        StringBuilder rawText = new StringBuilder();
+        List<String> warnings = new ArrayList<>();
+        for (int index = 0; index < files.size(); index++) {
+            MultipartFile file = files.get(index);
+            rawText.append("\n\n[upload ")
+                    .append(index + 1)
+                    .append("/")
+                    .append(files.size())
+                    .append(": ")
+                    .append(file.getOriginalFilename() == null ? "unknown" : file.getOriginalFilename())
+                    .append("]\n");
+            if (detectSourceType(file) == ChatSourceType.IMAGE) {
+                ImageTextExtractionService.ImageTextExtractionResult extractionResult = imageTextExtractionService.extract(file);
+                rawText.append(extractionResult.rawText());
+                if (StringUtils.hasText(extractionResult.warning())) {
+                    warnings.add(extractionResult.warning());
+                }
+            } else {
+                rawText.append(readFileAsText(file));
+            }
+        }
+
+        return conversationNormalizeService.normalizeRawText(
+                rawText.toString(),
+                targetName,
+                warnings.isEmpty()
+                        ? "OpenAI 정형화를 사용할 수 없어 업로드 파일의 텍스트 기반 fallback으로 분석했습니다."
+                        : String.join(" ", warnings)
+        );
+    }
+
     private ChatSourceType detectSourceType(MultipartFile file) {
         String contentType = file.getContentType();
         if (contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
@@ -113,6 +201,22 @@ public class ChatUploadService {
         }
 
         return ChatSourceType.TXT;
+    }
+
+    private ChatSourceType detectBatchSourceType(List<MultipartFile> files) {
+        boolean hasImage = false;
+        boolean hasText = false;
+        for (MultipartFile file : files) {
+            if (detectSourceType(file) == ChatSourceType.IMAGE) {
+                hasImage = true;
+            } else {
+                hasText = true;
+            }
+        }
+        if (hasImage && hasText) {
+            return ChatSourceType.MIXED;
+        }
+        return hasImage ? ChatSourceType.IMAGE : ChatSourceType.TXT;
     }
 
     private String readFileAsText(MultipartFile file) {

@@ -16,6 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,47 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
             ));
         } catch (IOException exception) {
             log.warn("Failed to read image for OpenAI normalization.", exception);
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public Optional<NormalizedConversationResult> normalizeFiles(
+            List<MultipartFile> files,
+            String targetName,
+            String description
+    ) {
+        if (files == null || files.isEmpty() || !hasApiKey()) {
+            return Optional.empty();
+        }
+
+        try {
+            List<Map<String, String>> content = new ArrayList<>();
+            content.add(Map.of("type", "input_text", "text", normalizationPrompt(targetName, description)));
+            for (int index = 0; index < files.size(); index++) {
+                MultipartFile file = files.get(index);
+                if (file == null || file.isEmpty()) {
+                    continue;
+                }
+                String filename = StringUtils.hasText(file.getOriginalFilename())
+                        ? file.getOriginalFilename().trim()
+                        : "upload-" + (index + 1);
+                String marker = "[upload %d/%d: %s]".formatted(index + 1, files.size(), filename);
+                if (isImage(file)) {
+                    String contentType = StringUtils.hasText(file.getContentType()) ? file.getContentType() : MediaType.IMAGE_PNG_VALUE;
+                    String base64 = Base64.getEncoder().encodeToString(file.getBytes());
+                    content.add(Map.of("type", "input_text", "text", marker + " 같은 카카오톡 대화의 순서 있는 캡처입니다. 위에서 아래로 읽으세요."));
+                    content.add(Map.of("type", "input_image", "image_url", "data:%s;base64,%s".formatted(contentType, base64)));
+                } else {
+                    content.add(Map.of(
+                            "type", "input_text",
+                            "text", marker + "\n" + new String(file.getBytes(), StandardCharsets.UTF_8)
+                    ));
+                }
+            }
+            return requestNormalizedConversation(content);
+        } catch (IOException exception) {
+            log.warn("Failed to read files for OpenAI normalization.", exception);
             return Optional.empty();
         }
     }
@@ -179,16 +221,25 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
     }
 
     private String normalizationPrompt(String targetName) {
+        return normalizationPrompt(targetName, null);
+    }
+
+    private String normalizationPrompt(String targetName, String description) {
         String targetInstruction = StringUtils.hasText(targetName)
                 ? "분석 대상 또는 상대방 이름 힌트: " + targetName.trim()
                 : "분석 대상 이름 힌트는 제공되지 않았습니다.";
+        String requestInstruction = StringUtils.hasText(description)
+                ? "사용자가 특히 궁금해하는 분석 요청: " + description.trim()
+                : "사용자의 추가 분석 요청은 제공되지 않았습니다.";
 
         return """
                 너는 비정형 대화 원본을 정형화하는 엔진이다.
-                입력은 카카오톡 txt, 복사된 대화, OCR이 필요한 채팅 캡처 이미지 등 어떤 형식일 수 있다.
+                입력은 카카오톡 txt, 복사된 대화, OCR이 필요한 여러 장의 채팅 캡처 이미지 등 어떤 형식일 수 있다.
 
                 목표:
                 - 원본에서 실제 대화 메시지를 최대한 추출한다.
+                - 여러 캡처가 들어오면 첨부 순서대로 읽고, 화면이 겹쳐 생기는 중복 메시지는 한 번만 남긴다.
+                - txt와 이미지가 함께 들어오면 같은 대화를 보강하는 자료로 보고 충돌하지 않는 메시지를 합친다.
                 - 광고, 시스템 문구, 저장 날짜, 날짜 구분선은 메시지로 넣지 않는다.
                 - 발신자를 가능한 한 추정한다.
                 - 시간이 있으면 ISO-8601 LocalDateTime 형식으로 timestamp를 넣는다.
@@ -199,7 +250,21 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
                 - 성격/관계 분석은 하지 말고 정형화만 한다.
 
                 %s
-                """.formatted(targetInstruction);
+                %s
+                """.formatted(targetInstruction, requestInstruction);
+    }
+
+    private boolean isImage(MultipartFile file) {
+        String contentType = file.getContentType();
+        if (contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith("image/")) {
+            return true;
+        }
+        String filename = file.getOriginalFilename();
+        if (filename == null) {
+            return false;
+        }
+        String lower = filename.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp");
     }
 
     private Map<String, Object> responseFormat() {

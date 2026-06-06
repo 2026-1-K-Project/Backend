@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @Tag(
         name = "업로드",
         description = "txt, 이미지 등 비정형 대화 파일을 OpenAI로 정형화하고 reportId를 생성하는 API"
@@ -51,8 +53,35 @@ public class ChatUploadPlatformController {
                     description = "상대방 또는 분석 대상 이름 힌트. OpenAI 정형화와 발신자 추정에 사용합니다.",
                     example = "노지섭"
             )
-            @RequestParam(value = "targetName", required = false) String targetName
+            @RequestParam(value = "targetName", required = false) String targetName,
+            @Parameter(
+                    description = "사용자가 특히 궁금해하는 분석 요청. 예: 이 사람 진심이 뭘까요?",
+                    example = "상대방이 나에게 호감이 있는지 알고 싶어요."
+            )
+            @RequestParam(value = "description", required = false) String description
     ) {
-        return chatUploadService.upload(file, category, targetName);
+        return chatUploadService.upload(file, category, targetName, description);
+    }
+
+    @Operation(
+            summary = "여러 대화 파일/캡처 업로드 및 정형화",
+            description = """
+                    카카오톡 txt 파일 1개, 여러 장의 채팅 캡처 이미지, 또는 txt와 이미지를 함께 업로드합니다.
+                    files 배열 순서가 캡처 읽기 순서로 사용되므로 프론트는 사용자가 고른 순서 그대로 전송해야 합니다.
+                    OpenAI vision/text 정형화를 우선 사용하며, 사용할 수 없으면 텍스트 기반 fallback으로 리포트를 생성합니다.
+                    """
+    )
+    @PostMapping(value = "/chat/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ChatUploadResponse uploadChatBatch(
+            @Parameter(description = "업로드할 파일 목록. txt, png, jpg, jpeg, webp 형식을 지원합니다.", required = true)
+            @RequestParam("files") List<MultipartFile> files,
+            @Parameter(description = "분석 카테고리. 예: 썸, 재회, 환승, 소개팅", example = "썸")
+            @RequestParam(value = "category", required = false) String category,
+            @Parameter(description = "상대방 또는 분석 대상 이름 힌트", example = "노지섭")
+            @RequestParam(value = "targetName", required = false) String targetName,
+            @Parameter(description = "사용자가 특히 궁금해하는 분석 요청", example = "상대방이 나에게 호감이 있는지 알고 싶어요.")
+            @RequestParam(value = "description", required = false) String description
+    ) {
+        return chatUploadService.uploadBatch(files, category, targetName, description);
     }
 }
