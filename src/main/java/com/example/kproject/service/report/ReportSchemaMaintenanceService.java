@@ -40,6 +40,11 @@ public class ReportSchemaMaintenanceService implements ApplicationRunner {
         try {
             jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT");
             jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS uploaded_file_count INTEGER NOT NULL DEFAULT 1");
+            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS member_id BIGINT");
+            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS trashed BOOLEAN NOT NULL DEFAULT FALSE");
+            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP");
+            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS title VARCHAR(255)");
+            jdbcTemplate.execute("UPDATE reports SET title = COALESCE(title, category || ' 분석 리포트')");
         } catch (Exception exception) {
             log.debug("Skipping reports upload metadata column maintenance: {}", exception.getMessage());
         }

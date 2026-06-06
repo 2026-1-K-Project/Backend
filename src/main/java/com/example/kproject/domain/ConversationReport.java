@@ -51,6 +51,18 @@ public class ConversationReport {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column
+    private Long memberId;
+
+    @Column(nullable = false)
+    private boolean trashed;
+
+    @Column
+    private LocalDateTime trashedAt;
+
+    @Column(nullable = false)
+    private String title;
+
     @Column(nullable = false)
     private int uploadedFileCount;
 
@@ -74,7 +86,7 @@ public class ConversationReport {
             String analysisMode,
             String warning
     ) {
-        this(category, sourceType, rawText, normalizedJson, participantsJson, messageCount, status, analysisMode, warning, null, 1);
+        this(category, sourceType, rawText, normalizedJson, participantsJson, messageCount, status, analysisMode, warning, null, 1, null);
     }
 
     public ConversationReport(
@@ -90,6 +102,23 @@ public class ConversationReport {
             String description,
             int uploadedFileCount
     ) {
+        this(category, sourceType, rawText, normalizedJson, participantsJson, messageCount, status, analysisMode, warning, description, uploadedFileCount, null);
+    }
+
+    public ConversationReport(
+            String category,
+            ChatSourceType sourceType,
+            String rawText,
+            String normalizedJson,
+            String participantsJson,
+            int messageCount,
+            ReportStatus status,
+            String analysisMode,
+            String warning,
+            String description,
+            int uploadedFileCount,
+            Long memberId
+    ) {
         this.category = category;
         this.sourceType = sourceType.name();
         this.rawText = rawText == null ? "" : rawText;
@@ -100,9 +129,23 @@ public class ConversationReport {
         this.analysisMode = analysisMode;
         this.warning = warning;
         this.description = description == null ? "" : description;
+        this.memberId = memberId;
+        this.trashed = false;
+        this.trashedAt = null;
+        this.title = category + " 분석 리포트";
         this.uploadedFileCount = Math.max(uploadedFileCount, 1);
         this.summaryJson = "{}";
         this.fullReportJson = "{}";
         this.createdAt = LocalDateTime.now();
+    }
+
+    public void moveToTrash() {
+        this.trashed = true;
+        this.trashedAt = LocalDateTime.now();
+    }
+
+    public void restoreFromTrash() {
+        this.trashed = false;
+        this.trashedAt = null;
     }
 }

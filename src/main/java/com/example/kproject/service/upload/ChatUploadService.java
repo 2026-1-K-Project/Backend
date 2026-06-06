@@ -51,6 +51,16 @@ public class ChatUploadService {
     }
 
     public ChatUploadResponse upload(MultipartFile file, String category, String targetName, String description) {
+        return upload(file, category, targetName, description, null);
+    }
+
+    public ChatUploadResponse upload(
+            MultipartFile file,
+            String category,
+            String targetName,
+            String description,
+            Long memberId
+    ) {
         if (file == null || file.isEmpty()) {
             throw new ChatUploadException("업로드할 대화 파일이 필요합니다.");
         }
@@ -68,7 +78,8 @@ public class ChatUploadService {
                 sourceType,
                 normalizedResult,
                 description,
-                1
+                1,
+                memberId
         );
 
         return new ChatUploadResponse(
@@ -85,6 +96,16 @@ public class ChatUploadService {
             String category,
             String targetName,
             String description
+    ) {
+        return uploadBatch(files, category, targetName, description, null);
+    }
+
+    public ChatUploadResponse uploadBatch(
+            List<MultipartFile> files,
+            String category,
+            String targetName,
+            String description,
+            Long memberId
     ) {
         List<MultipartFile> validFiles = files == null ? List.of() : files.stream()
                 .filter(file -> file != null && !file.isEmpty())
@@ -109,7 +130,8 @@ public class ChatUploadService {
                 sourceType,
                 normalizedResult,
                 description,
-                validFiles.size()
+                validFiles.size(),
+                memberId
         );
 
         return new ChatUploadResponse(
