@@ -99,10 +99,10 @@ public class ReportStorageService {
         boolean completed = "COMPLETED".equals(report.getStatus());
         return new ReportStatusResponse(
                 report.getId(),
-                report.getStatus(),
+                safeStatus(report),
                 completed ? 100 : 50,
                 completed ? "분석이 완료되었습니다." : "분석을 처리하는 중입니다.",
-                ReportAnalysisMode.valueOf(report.getAnalysisMode()),
+                safeAnalysisMode(report.getAnalysisMode()),
                 report.getWarning()
         );
     }
@@ -169,19 +169,58 @@ public class ReportStorageService {
         return new ReportListItemResponse(
                 report.getId(),
                 report.getMemberId(),
-                report.getTitle(),
-                report.getCategory(),
-                report.getSourceType(),
+                safeTitle(report),
+                safeCategory(report),
+                safeSourceType(report),
                 report.getMessageCount(),
                 report.getUploadedFileCount(),
-                report.getStatus(),
-                ReportAnalysisMode.valueOf(report.getAnalysisMode()),
+                safeStatus(report),
+                safeAnalysisMode(report.getAnalysisMode()),
                 readInterestScore(report),
                 report.getDescription(),
                 report.isTrashed(),
                 report.getCreatedAt(),
                 report.getTrashedAt()
         );
+    }
+
+    private String safeTitle(ConversationReport report) {
+        if (report.getTitle() != null && !report.getTitle().isBlank()) {
+            return report.getTitle();
+        }
+        String category = report.getCategory() == null || report.getCategory().isBlank()
+                ? "대화"
+                : report.getCategory();
+        return category + " 분석 리포트";
+    }
+
+    private String safeCategory(ConversationReport report) {
+        return report.getCategory() == null || report.getCategory().isBlank()
+                ? "일반 분석"
+                : report.getCategory();
+    }
+
+    private String safeSourceType(ConversationReport report) {
+        return report.getSourceType() == null || report.getSourceType().isBlank()
+                ? "TXT"
+                : report.getSourceType();
+    }
+
+    private String safeStatus(ConversationReport report) {
+        return report.getStatus() == null || report.getStatus().isBlank()
+                ? "COMPLETED"
+                : report.getStatus();
+    }
+
+    private ReportAnalysisMode safeAnalysisMode(String analysisMode) {
+        if (analysisMode == null || analysisMode.isBlank()) {
+            return ReportAnalysisMode.FLEXIBLE;
+        }
+        try {
+            return ReportAnalysisMode.valueOf(analysisMode);
+        } catch (IllegalArgumentException exception) {
+            return ReportAnalysisMode.FLEXIBLE;
+        }
     }
 
     private int readInterestScore(ConversationReport report) {

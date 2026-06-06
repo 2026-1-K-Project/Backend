@@ -87,6 +87,26 @@ class ReportStorageServiceTest {
         assertThat(report.getTrashedAt()).isNull();
     }
 
+    @Test
+    void listReportUsesFallbacksForLegacyRows() throws Exception {
+        ConversationReportRepository repository = Mockito.mock(ConversationReportRepository.class);
+        ReportStorageService service = new ReportStorageService(repository, new ObjectMapper());
+        ConversationReport report = report("썸", null);
+        setId(report, 30L);
+        setField(report, "title", null);
+        setField(report, "status", null);
+        setField(report, "analysisMode", "LEGACY");
+        Mockito.when(repository.findByMemberIdIsNullAndTrashedFalseOrderByCreatedAtDesc())
+                .thenReturn(List.of(report));
+
+        var responses = service.listReports(null, false);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).title()).isEqualTo("썸 분석 리포트");
+        assertThat(responses.get(0).status()).isEqualTo("COMPLETED");
+        assertThat(responses.get(0).analysisMode()).isEqualTo(ReportAnalysisMode.FLEXIBLE);
+    }
+
     private ConversationReport report(String category, Long memberId) {
         NormalizedConversationDto conversation = new NormalizedConversationDto(
                 List.of("사용자", "상대방"),
@@ -116,8 +136,15 @@ class ReportStorageServiceTest {
     }
 
     private void setId(ConversationReport report, Long id) throws Exception {
+        setField(report, "id", id);
+    }
+
+    private void setField(ConversationReport report, String fieldName, Object value) throws Exception {
         Field field = ConversationReport.class.getDeclaredField("id");
+        if (!"id".equals(fieldName)) {
+            field = ConversationReport.class.getDeclaredField(fieldName);
+        }
         field.setAccessible(true);
-        field.set(report, id);
+        field.set(report, value);
     }
 }
