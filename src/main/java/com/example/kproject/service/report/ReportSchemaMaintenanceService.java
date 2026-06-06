@@ -37,16 +37,24 @@ public class ReportSchemaMaintenanceService implements ApplicationRunner {
     }
 
     private void addUploadMetadataColumns() {
+        executeMaintenance("ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT");
+        executeMaintenance("ALTER TABLE reports ADD COLUMN IF NOT EXISTS uploaded_file_count INTEGER NOT NULL DEFAULT 1");
+        executeMaintenance("ALTER TABLE reports ADD COLUMN IF NOT EXISTS member_id BIGINT");
+        executeMaintenance("ALTER TABLE reports ADD COLUMN IF NOT EXISTS trashed BOOLEAN NOT NULL DEFAULT FALSE");
+        executeMaintenance("ALTER TABLE reports ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP");
+        executeMaintenance("ALTER TABLE reports ADD COLUMN IF NOT EXISTS title VARCHAR(255)");
+        executeMaintenance("UPDATE reports SET title = COALESCE(NULLIF(title, ''), COALESCE(category, '대화') || ' 분석 리포트')");
+        executeMaintenance("UPDATE reports SET status = COALESCE(NULLIF(status, ''), 'COMPLETED')");
+        executeMaintenance("UPDATE reports SET analysis_mode = COALESCE(NULLIF(analysis_mode, ''), 'FLEXIBLE')");
+        executeMaintenance("UPDATE reports SET uploaded_file_count = 1 WHERE uploaded_file_count IS NULL OR uploaded_file_count < 1");
+        executeMaintenance("UPDATE reports SET trashed = FALSE WHERE trashed IS NULL");
+    }
+
+    private void executeMaintenance(String sql) {
         try {
-            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT");
-            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS uploaded_file_count INTEGER NOT NULL DEFAULT 1");
-            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS member_id BIGINT");
-            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS trashed BOOLEAN NOT NULL DEFAULT FALSE");
-            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP");
-            jdbcTemplate.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS title VARCHAR(255)");
-            jdbcTemplate.execute("UPDATE reports SET title = COALESCE(title, category || ' 분석 리포트')");
+            jdbcTemplate.execute(sql);
         } catch (Exception exception) {
-            log.debug("Skipping reports upload metadata column maintenance: {}", exception.getMessage());
+            log.warn("Skipping report schema maintenance SQL [{}]: {}", sql, exception.getMessage());
         }
     }
 }
