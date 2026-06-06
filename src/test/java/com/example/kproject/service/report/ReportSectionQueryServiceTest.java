@@ -121,7 +121,8 @@ class ReportSectionQueryServiceTest {
                 new DecisiveMomentAnalysisService(aiService),
                 new ActionableInsightService(aiService),
                 new QualitativeSignalsAnalysisService(keywordExtractionService),
-                new PreferenceAnalysisService()
+                new PreferenceAnalysisService(),
+                (context, normalized, summary, relationship, personality, insights, userRequest) -> Optional.empty()
         );
     }
 }
