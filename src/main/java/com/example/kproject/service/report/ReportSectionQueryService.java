@@ -7,6 +7,10 @@ import com.example.kproject.domain.ReportAnalysisContext;
 import com.example.kproject.domain.ReportMessage;
 import com.example.kproject.dto.normalize.NormalizedConversationDto;
 import com.example.kproject.dto.report.AppReportResultResponse;
+import com.example.kproject.dto.report.AiAvoidMessage;
+import com.example.kproject.dto.report.AiConversationEvidence;
+import com.example.kproject.dto.report.AiDeepAnalysisResponse;
+import com.example.kproject.dto.report.AiNextAction;
 import com.example.kproject.dto.report.ReportAnalysisMode;
 import com.example.kproject.dto.report.ReportDetailResponse;
 import com.example.kproject.dto.report.ReportInsightsResponse;
@@ -27,6 +31,7 @@ import com.example.kproject.service.analysis.PreferenceAnalysisService;
 import com.example.kproject.service.analysis.QualitativeSignalsAnalysisService;
 import com.example.kproject.service.analysis.ReplyTimeAnalysisService;
 import com.example.kproject.service.analysis.TalkRatioAnalysisService;
+import com.example.kproject.service.ai.AiDeepAnalysisService;
 import com.example.kproject.service.insight.ActionableInsightService;
 import com.example.kproject.util.ReportTextUtils;
 import org.springframework.stereotype.Service;
@@ -56,6 +61,7 @@ public class ReportSectionQueryService {
     private final ActionableInsightService actionableInsightService;
     private final QualitativeSignalsAnalysisService qualitativeSignalsAnalysisService;
     private final PreferenceAnalysisService preferenceAnalysisService;
+    private final AiDeepAnalysisService aiDeepAnalysisService;
 
     public ReportSectionQueryService(
             ReportStorageService reportStorageService,
@@ -71,7 +77,8 @@ public class ReportSectionQueryService {
             DecisiveMomentAnalysisService decisiveMomentAnalysisService,
             ActionableInsightService actionableInsightService,
             QualitativeSignalsAnalysisService qualitativeSignalsAnalysisService,
-            PreferenceAnalysisService preferenceAnalysisService
+            PreferenceAnalysisService preferenceAnalysisService,
+            AiDeepAnalysisService aiDeepAnalysisService
     ) {
         this.reportStorageService = reportStorageService;
         this.analysisResultRepository = analysisResultRepository;
@@ -87,6 +94,7 @@ public class ReportSectionQueryService {
         this.actionableInsightService = actionableInsightService;
         this.qualitativeSignalsAnalysisService = qualitativeSignalsAnalysisService;
         this.preferenceAnalysisService = preferenceAnalysisService;
+        this.aiDeepAnalysisService = aiDeepAnalysisService;
     }
 
     public ReportDetailResponse getDetail(Long reportId) {
@@ -135,6 +143,20 @@ public class ReportSectionQueryService {
         ReportRelationshipResponse relationship = getRelationship(reportId);
         ReportPersonalityResponse personality = getPersonality(reportId);
         ReportInsightsResponse insights = getInsights(reportId);
+        NormalizedConversationDto normalized = reportStorageService.readNormalizedConversation(report);
+        ReportAnalysisContext context = toContext(report, normalized);
+        List<String> evidence = evidence(summary, relationship, insights, report.getMessageCount());
+        List<String> riskSignals = riskSignals(relationship, insights, report.getMessageCount());
+        AiDeepAnalysisResponse aiDeepAnalysis = aiDeepAnalysisService.analyze(
+                        context,
+                        normalized,
+                        summary,
+                        relationship,
+                        personality,
+                        insights,
+                        report.getDescription()
+                )
+                .orElseGet(() -> fallbackDeepAnalysis(summary, relationship, personality, insights, evidence, riskSignals));
 
         ReportResponse.DecisiveMoment decisiveMoment = firstOrNull(insights.decisiveMoments());
         return new AppReportResultResponse(
@@ -155,10 +177,11 @@ public class ReportSectionQueryService {
                 firstOrDefault(insights.warnings(), report.getWarning()),
                 report.getDescription(),
                 analysisSummary(summary, relationship, personality, insights),
-                evidence(summary, relationship, insights, report.getMessageCount()),
-                riskSignals(relationship, insights, report.getMessageCount()),
+                evidence,
+                riskSignals,
                 safeList(insights.recommendedQuestions()),
-                safeList(insights.recommendedReplies())
+                safeList(insights.recommendedReplies()),
+                aiDeepAnalysis
         );
     }
 
@@ -562,6 +585,142 @@ public class ReportSectionQueryService {
             return "관계 지수가 " + interestScore + "%로 중간 수준이라 긍정/소극 신호가 함께 보입니다.";
         }
         return "관계 지수가 " + interestScore + "%로 낮아 현재 대화에서는 적극적인 관심 신호가 제한적입니다.";
+    }
+
+    private AiDeepAnalysisResponse fallbackDeepAnalysis(
+            ReportSummaryResponse summary,
+            ReportRelationshipResponse relationship,
+            ReportPersonalityResponse personality,
+            ReportInsightsResponse insights,
+            List<String> evidence,
+            List<String> riskSignals
+    ) {
+        int confidence = ReportTextUtils.clamp(
+                45 + Math.abs(relationship.interestScore() - 50) / 2 + Math.min(relationship.languageSync(), 30) / 3,
+                45,
+                85
+        );
+        return new AiDeepAnalysisResponse(
+                verdict(relationship.interestScore()),
+                confidence,
+                relationshipStage(relationship.interestScore(), relationship.languageSync()),
+                StringUtils.hasText(summary.headline()) ? summary.headline() : scoreSummary(relationship.interestScore()),
+                fallbackPositiveSignals(evidence, relationship),
+                fallbackRiskSignals(riskSignals),
+                StringUtils.hasText(personality.counterpartyTendency())
+                        ? personality.counterpartyTendency()
+                        : "상대방은 대화 흐름과 반응 패턴을 기준으로 아직 탐색 중인 스타일로 보입니다.",
+                "사용자는 현재 대화를 분석해 다음 행동을 정하려는 단계이며, 질문과 제안의 강도를 조절하는 것이 좋습니다.",
+                fallbackNextActions(insights),
+                fallbackAvoidMessages(relationship)
+        );
+    }
+
+    private List<AiConversationEvidence> fallbackPositiveSignals(
+            List<String> evidence,
+            ReportRelationshipResponse relationship
+    ) {
+        List<AiConversationEvidence> signals = new ArrayList<>();
+        int strength = ReportTextUtils.clamp(relationship.interestScore(), 0, 100);
+        for (String item : evidence.stream().limit(3).toList()) {
+            signals.add(new AiConversationEvidence(
+                    "POSITIVE",
+                    "긍정 신호",
+                    "",
+                    item,
+                    strength
+            ));
+        }
+        if (signals.isEmpty()) {
+            signals.add(new AiConversationEvidence(
+                    "POSITIVE",
+                    "대화 지속 가능성",
+                    "",
+                    scoreEvidence(relationship.interestScore()),
+                    strength
+            ));
+        }
+        return signals;
+    }
+
+    private List<AiConversationEvidence> fallbackRiskSignals(List<String> riskSignals) {
+        return riskSignals.stream()
+                .limit(4)
+                .map(signal -> new AiConversationEvidence(
+                        "RISK",
+                        "주의 신호",
+                        "",
+                        signal,
+                        60
+                ))
+                .toList();
+    }
+
+    private List<AiNextAction> fallbackNextActions(ReportInsightsResponse insights) {
+        List<String> replies = safeList(insights.recommendedReplies());
+        if (!replies.isEmpty()) {
+            return replies.stream()
+                    .limit(3)
+                    .map(reply -> new AiNextAction(
+                            "바로 보내기 좋은 멘트",
+                            reply,
+                            "기존 대화 흐름을 끊지 않고 자연스럽게 이어가기 좋습니다."
+                    ))
+                    .toList();
+        }
+        return List.of(
+                new AiNextAction(
+                        "가볍게 이어가기",
+                        "아까 말한 거 생각났는데, 그거 꽤 재밌어 보이더라.",
+                        "상대에게 확답을 요구하지 않고 기존 주제를 자연스럽게 이어갈 수 있습니다."
+                ),
+                new AiNextAction(
+                        "부담 낮은 약속 제안",
+                        "이번 주에 시간 맞으면 가볍게 커피 한잔할래?",
+                        "관계가 긍정적일 때 직접적인 고백보다 낮은 부담의 만남 제안이 더 안전합니다."
+                )
+        );
+    }
+
+    private List<AiAvoidMessage> fallbackAvoidMessages(ReportRelationshipResponse relationship) {
+        List<AiAvoidMessage> messages = new ArrayList<>();
+        messages.add(new AiAvoidMessage(
+                "그래서 너 나 어떻게 생각해?",
+                "현재 단계에서는 직접적인 확인 질문이 상대에게 부담으로 느껴질 수 있습니다."
+        ));
+        if (relationship.interestScore() < 65) {
+            messages.add(new AiAvoidMessage(
+                    "왜 답장이 늦어?",
+                    "답장 속도를 추궁하면 대화 분위기가 방어적으로 바뀔 수 있습니다."
+            ));
+        }
+        return messages;
+    }
+
+    private String verdict(int interestScore) {
+        if (interestScore >= 80) {
+            return "호감 신호 강함";
+        }
+        if (interestScore >= 65) {
+            return "호감 가능성 있음";
+        }
+        if (interestScore >= 45) {
+            return "탐색 단계";
+        }
+        return "신중한 접근 필요";
+    }
+
+    private String relationshipStage(int interestScore, int languageSync) {
+        if (interestScore >= 80 && languageSync >= 60) {
+            return "적극적 접근 가능 단계";
+        }
+        if (interestScore >= 65) {
+            return "친밀감 형성 단계";
+        }
+        if (interestScore >= 45) {
+            return "관계 탐색 단계";
+        }
+        return "속도 조절이 필요한 단계";
     }
 
     private String replyTimeText(int averageReplyMinutes) {
