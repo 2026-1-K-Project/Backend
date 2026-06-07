@@ -156,7 +156,7 @@ public class ReportSectionQueryService {
                         insights,
                         report.getDescription()
                 )
-                .orElseGet(() -> fallbackDeepAnalysis(summary, relationship, personality, insights, evidence, riskSignals));
+                .orElseGet(() -> fallbackDeepAnalysis(summary, relationship, personality, insights, evidence, riskSignals, report.getDescription()));
 
         ReportResponse.DecisiveMoment decisiveMoment = firstOrNull(insights.decisiveMoments());
         return new AppReportResultResponse(
@@ -593,7 +593,8 @@ public class ReportSectionQueryService {
             ReportPersonalityResponse personality,
             ReportInsightsResponse insights,
             List<String> evidence,
-            List<String> riskSignals
+            List<String> riskSignals,
+            String userRequest
     ) {
         int confidence = ReportTextUtils.clamp(
                 45 + Math.abs(relationship.interestScore() - 50) / 2 + Math.min(relationship.languageSync(), 30) / 3,
@@ -605,6 +606,9 @@ public class ReportSectionQueryService {
                 confidence,
                 relationshipStage(relationship.interestScore(), relationship.languageSync()),
                 StringUtils.hasText(summary.headline()) ? summary.headline() : scoreSummary(relationship.interestScore()),
+                requestAnswer(userRequest, relationship),
+                requestReason(userRequest, summary, relationship),
+                requestEvidence(userRequest, evidence, riskSignals),
                 fallbackPositiveSignals(evidence, relationship),
                 fallbackRiskSignals(riskSignals),
                 StringUtils.hasText(personality.counterpartyTendency())
@@ -641,6 +645,51 @@ public class ReportSectionQueryService {
             ));
         }
         return signals;
+    }
+
+    private String requestAnswer(String userRequest, ReportRelationshipResponse relationship) {
+        if (!StringUtils.hasText(userRequest)) {
+            return "별도 요청내용이 없어 전체 대화 흐름 기준으로 관계 신호를 분석했습니다.";
+        }
+        int score = relationship.interestScore();
+        if (score >= 70) {
+            return "요청내용에 대해 보면 긍정적인 가능성이 있습니다. 다만 실제 관계 판단은 추가 대화 흐름까지 함께 보는 편이 안전합니다.";
+        }
+        if (score >= 45) {
+            return "요청내용에 대해 단정하기는 어렵지만, 일부 긍정 신호와 확인이 필요한 신호가 함께 보입니다.";
+        }
+        return "요청내용에 대해 현재 대화만으로는 긍정적으로 단정하기 어렵습니다. 상대 반응을 조금 더 확인하는 편이 좋습니다.";
+    }
+
+    private String requestReason(
+            String userRequest,
+            ReportSummaryResponse summary,
+            ReportRelationshipResponse relationship
+    ) {
+        if (!StringUtils.hasText(userRequest)) {
+            return "사용자가 별도 질문을 입력하지 않아 말의 비율, 응답 속도, 언어 싱크, 핵심 키워드를 종합했습니다.";
+        }
+        return "요청내용과 관련해 관계 지수 "
+                + relationship.interestScore()
+                + "점, 언어 싱크 "
+                + relationship.languageSync()
+                + "점, 요약 흐름인 '"
+                + (StringUtils.hasText(summary.headline()) ? summary.headline() : "전체 대화 흐름")
+                + "'을 함께 반영했습니다.";
+    }
+
+    private List<String> requestEvidence(String userRequest, List<String> evidence, List<String> riskSignals) {
+        List<String> merged = new ArrayList<>();
+        if (StringUtils.hasText(userRequest)) {
+            merged.add("요청내용: " + userRequest.trim());
+        }
+        merged.addAll(safeList(evidence));
+        merged.addAll(safeList(riskSignals));
+        return merged.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .limit(4)
+                .toList();
     }
 
     private List<AiConversationEvidence> fallbackRiskSignals(List<String> riskSignals) {

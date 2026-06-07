@@ -8,6 +8,7 @@ import com.example.kproject.dto.normalize.NormalizedConversationDto;
 import com.example.kproject.dto.report.ReportAnalysisMode;
 import com.example.kproject.dto.report.ReportListItemResponse;
 import com.example.kproject.dto.report.ReportStatusResponse;
+import com.example.kproject.exception.ReportAccessDeniedException;
 import com.example.kproject.exception.ReportGenerationException;
 import com.example.kproject.exception.ReportNotFoundException;
 import com.example.kproject.repository.ConversationReportRepository;
@@ -96,6 +97,15 @@ public class ReportStorageService {
 
     public ReportStatusResponse getStatus(Long reportId) {
         ConversationReport report = getReport(reportId);
+        return toStatusResponse(report);
+    }
+
+    public ReportStatusResponse getStatus(Long reportId, Long memberId) {
+        ConversationReport report = getReport(reportId, memberId);
+        return toStatusResponse(report);
+    }
+
+    private ReportStatusResponse toStatusResponse(ConversationReport report) {
         boolean completed = "COMPLETED".equals(report.getStatus());
         return new ReportStatusResponse(
                 report.getId(),
@@ -115,6 +125,13 @@ public class ReportStorageService {
     }
 
     @Transactional
+    public ReportListItemResponse moveToTrash(Long reportId, Long memberId) {
+        ConversationReport report = getReport(reportId, memberId);
+        report.moveToTrash();
+        return toListItem(report);
+    }
+
+    @Transactional
     public ReportListItemResponse restore(Long reportId) {
         ConversationReport report = getReport(reportId);
         report.restoreFromTrash();
@@ -122,8 +139,23 @@ public class ReportStorageService {
     }
 
     @Transactional
+    public ReportListItemResponse restore(Long reportId, Long memberId) {
+        ConversationReport report = getReport(reportId, memberId);
+        report.restoreFromTrash();
+        return toListItem(report);
+    }
+
+    @Transactional
     public void deleteReport(Long reportId) {
         ConversationReport report = getReport(reportId);
+        assertTrashedBeforeDelete(report);
+        conversationReportRepository.delete(report);
+    }
+
+    @Transactional
+    public void deleteReport(Long reportId, Long memberId) {
+        ConversationReport report = getReport(reportId, memberId);
+        assertTrashedBeforeDelete(report);
         conversationReportRepository.delete(report);
     }
 
@@ -138,6 +170,18 @@ public class ReportStorageService {
     public ConversationReport getReport(Long reportId) {
         return conversationReportRepository.findById(reportId)
                 .orElseThrow(() -> new ReportNotFoundException(reportId));
+    }
+
+    public ConversationReport getReport(Long reportId, Long memberId) {
+        ConversationReport report = getReport(reportId);
+        if (!ownsReport(report, memberId)) {
+            throw new ReportAccessDeniedException(reportId);
+        }
+        return report;
+    }
+
+    public void assertReportOwner(Long reportId, Long memberId) {
+        getReport(reportId, memberId);
     }
 
     public NormalizedConversationDto readNormalizedConversation(ConversationReport report) {
@@ -163,6 +207,19 @@ public class ReportStorageService {
             cursor = cursor.getCause();
         }
         return cursor.getMessage() == null ? cursor.getClass().getSimpleName() : cursor.getMessage();
+    }
+
+    private boolean ownsReport(ConversationReport report, Long memberId) {
+        if (report.getMemberId() == null) {
+            return memberId == null;
+        }
+        return report.getMemberId().equals(memberId);
+    }
+
+    private void assertTrashedBeforeDelete(ConversationReport report) {
+        if (!report.isTrashed()) {
+            throw new ReportGenerationException("영구 삭제는 휴지통으로 이동된 리포트만 가능합니다.");
+        }
     }
 
     private ReportListItemResponse toListItem(ConversationReport report) {
