@@ -148,12 +148,14 @@ public class ReportStorageService {
     @Transactional
     public void deleteReport(Long reportId) {
         ConversationReport report = getReport(reportId);
+        assertTrashedBeforeDelete(report);
         conversationReportRepository.delete(report);
     }
 
     @Transactional
     public void deleteReport(Long reportId, Long memberId) {
         ConversationReport report = getReport(reportId, memberId);
+        assertTrashedBeforeDelete(report);
         conversationReportRepository.delete(report);
     }
 
@@ -212,6 +214,12 @@ public class ReportStorageService {
             return memberId == null;
         }
         return report.getMemberId().equals(memberId);
+    }
+
+    private void assertTrashedBeforeDelete(ConversationReport report) {
+        if (!report.isTrashed()) {
+            throw new ReportGenerationException("영구 삭제는 휴지통으로 이동된 리포트만 가능합니다.");
+        }
     }
 
     private ReportListItemResponse toListItem(ConversationReport report) {
