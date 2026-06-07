@@ -33,8 +33,13 @@ public class ConversationNormalizeService {
     }
 
     public NormalizedConversationResult normalize(KakaoChatParsedDocument parsedDocument, String targetName) {
-        ResolvedCounterpart counterpart = resolveCounterpart(parsedDocument, targetName);
-        List<NormalizedConversationDto.MessageDto> structuredMessages = toStructuredMessages(parsedDocument, counterpart);
+        return normalize(parsedDocument, targetName, null);
+    }
+
+    public NormalizedConversationResult normalize(KakaoChatParsedDocument parsedDocument, String targetName, String myName) {
+        String meName = resolveMeName(myName);
+        ResolvedCounterpart counterpart = resolveCounterpart(parsedDocument, targetName, myName);
+        List<NormalizedConversationDto.MessageDto> structuredMessages = toStructuredMessages(parsedDocument, counterpart, meName);
         boolean structuredAvailable = parsedDocument.supportsStructuredAnalysis(
                 STRUCTURED_SUCCESS_THRESHOLD,
                 MIN_STRUCTURED_MESSAGE_COUNT
@@ -42,7 +47,7 @@ public class ConversationNormalizeService {
 
         if (structuredAvailable) {
             NormalizedConversationDto conversation = buildConversation(
-                    buildParticipants(structuredMessages, counterpart.displayName()),
+                    buildParticipants(structuredMessages, meName, counterpart.displayName()),
                     structuredMessages,
                     parsedDocument.rawText()
             );
@@ -56,7 +61,7 @@ public class ConversationNormalizeService {
 
         List<String> flexibleContents = extractFlexibleContents(parsedDocument);
         NormalizedConversationDto conversation = buildConversation(
-                List.of(ME_LABEL, counterpart.displayName()),
+                List.of(meName, counterpart.displayName()),
                 toFlexibleMessages(flexibleContents, counterpart.displayName()),
                 parsedDocument.rawText()
         );
@@ -69,10 +74,15 @@ public class ConversationNormalizeService {
     }
 
     public NormalizedConversationResult normalizeRawText(String rawText, String targetName, String warning) {
+        return normalizeRawText(rawText, targetName, null, warning);
+    }
+
+    public NormalizedConversationResult normalizeRawText(String rawText, String targetName, String myName, String warning) {
+        String resolvedMyName = resolveMeName(myName);
         String resolvedTargetName = StringUtils.hasText(targetName) ? targetName.trim() : DEFAULT_OTHER_LABEL;
         List<String> contents = linesFromRawText(rawText);
         NormalizedConversationDto conversation = buildConversation(
-                List.of(ME_LABEL, resolvedTargetName),
+                List.of(resolvedMyName, resolvedTargetName),
                 toFlexibleMessages(contents, resolvedTargetName),
                 rawText
         );
@@ -101,20 +111,22 @@ public class ConversationNormalizeService {
 
     private List<NormalizedConversationDto.MessageDto> toStructuredMessages(
             KakaoChatParsedDocument parsedDocument,
-            ResolvedCounterpart counterpart
+            ResolvedCounterpart counterpart,
+            String meName
     ) {
         return parsedDocument.messages().stream()
                 .filter(message -> StringUtils.hasText(message.dateTime()))
-                .map(message -> toNormalizedMessage(message, counterpart))
+                .map(message -> toNormalizedMessage(message, counterpart, meName))
                 .filter(message -> ReportTextUtils.hasText(message.content()))
                 .toList();
     }
 
     private NormalizedConversationDto.MessageDto toNormalizedMessage(
             KakaoChatMessageDto message,
-            ResolvedCounterpart counterpart
+            ResolvedCounterpart counterpart,
+            String meName
     ) {
-        String sender = normalizeSender(message.sender(), counterpart);
+        String sender = normalizeSender(message.sender(), counterpart, meName);
         String content = KakaoChatParsingUtils.normalizeForAnalysis(message.content());
         return new NormalizedConversationDto.MessageDto(
                 sender,
@@ -191,23 +203,28 @@ public class ConversationNormalizeService {
 
     private List<String> buildParticipants(
             List<NormalizedConversationDto.MessageDto> messages,
+            String meName,
             String counterpartName
     ) {
-        boolean hasCounterpart = messages.stream().anyMatch(message -> !ME_LABEL.equals(message.sender()));
+        boolean hasCounterpart = messages.stream().anyMatch(message -> !meName.equals(message.sender()));
         if (!hasCounterpart) {
-            return List.of(ME_LABEL);
+            return List.of(meName);
         }
-        return List.of(ME_LABEL, counterpartName);
+        return List.of(meName, counterpartName);
     }
 
-    private String normalizeSender(String sender, ResolvedCounterpart counterpart) {
+    private String normalizeSender(String sender, ResolvedCounterpart counterpart, String meName) {
         if (counterpart.originalSender() != null && counterpart.originalSender().equals(sender)) {
             return counterpart.displayName();
         }
-        return ME_LABEL;
+        return meName;
     }
 
     private ResolvedCounterpart resolveCounterpart(KakaoChatParsedDocument parsedDocument, String targetName) {
+        return resolveCounterpart(parsedDocument, targetName, null);
+    }
+
+    private ResolvedCounterpart resolveCounterpart(KakaoChatParsedDocument parsedDocument, String targetName, String myName) {
         List<String> distinctSenders = parsedDocument.messages().stream()
                 .filter(message -> message.specialType() == KakaoChatSpecialType.TEXT)
                 .map(KakaoChatMessageDto::sender)
@@ -215,11 +232,19 @@ public class ConversationNormalizeService {
                 .toList();
 
         String explicitTargetName = trimToNull(targetName);
+        String explicitMyName = trimToNull(myName);
         String roomName = parsedDocument.meta() == null ? null : trimToNull(parsedDocument.meta().roomName());
+        String mySender = matchSender(distinctSenders, explicitMyName);
         String counterpartSender = matchSender(distinctSenders, explicitTargetName);
 
         if (counterpartSender == null) {
             counterpartSender = matchSender(distinctSenders, roomName);
+        }
+        if (counterpartSender == null && mySender != null) {
+            counterpartSender = distinctSenders.stream()
+                    .filter(sender -> !sender.equals(mySender))
+                    .findFirst()
+                    .orElse(null);
         }
         if (counterpartSender == null && distinctSenders.size() >= 2) {
             counterpartSender = distinctSenders.get(1);
@@ -237,6 +262,11 @@ public class ConversationNormalizeService {
         }
 
         return new ResolvedCounterpart(counterpartSender, displayName);
+    }
+
+    private String resolveMeName(String myName) {
+        String explicitMyName = trimToNull(myName);
+        return StringUtils.hasText(explicitMyName) ? explicitMyName : ME_LABEL;
     }
 
     private String matchSender(List<String> distinctSenders, String hint) {
