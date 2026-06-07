@@ -54,6 +54,7 @@ public class ChatUploadPlatformController {
                     example = "노지섭"
             )
             @RequestParam(value = "targetName", required = false) String targetName,
+            @RequestParam(value = "myName", required = false) String myName,
             @Parameter(
                     description = "사용자가 특히 궁금해하는 분석 요청. 예: 이 사람 진심이 뭘까요?",
                     example = "상대방이 나에게 호감이 있는지 알고 싶어요."
@@ -62,7 +63,7 @@ public class ChatUploadPlatformController {
             @Parameter(description = "로그인 사용자의 memberId. 없으면 게스트 리포트로 저장합니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return chatUploadService.upload(file, category, targetName, description, memberId);
+        return chatUploadService.upload(file, category, targetName, myName, description, memberId);
     }
 
     @Operation(
@@ -81,11 +82,12 @@ public class ChatUploadPlatformController {
             @RequestParam(value = "category", required = false) String category,
             @Parameter(description = "상대방 또는 분석 대상 이름 힌트", example = "노지섭")
             @RequestParam(value = "targetName", required = false) String targetName,
+            @RequestParam(value = "myName", required = false) String myName,
             @Parameter(description = "사용자가 특히 궁금해하는 분석 요청", example = "상대방이 나에게 호감이 있는지 알고 싶어요.")
             @RequestParam(value = "description", required = false) String description,
             @Parameter(description = "로그인 사용자의 memberId. 없으면 게스트 리포트로 저장합니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return chatUploadService.uploadBatch(files, category, targetName, description, memberId);
+        return chatUploadService.uploadBatch(files, category, targetName, myName, description, memberId);
     }
 }
