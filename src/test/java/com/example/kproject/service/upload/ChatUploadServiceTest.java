@@ -99,7 +99,7 @@ class ChatUploadServiceTest {
     void useAiNormalizationBeforeLocalParsing() throws Exception {
         ConversationReportRepository repository = mockRepositoryWithId(4L);
         AiConversationNormalizeService aiNormalizer = Mockito.mock(AiConversationNormalizeService.class);
-        Mockito.when(aiNormalizer.normalizeText(any(), any()))
+        Mockito.when(aiNormalizer.normalizeText(any(), any(), any()))
                 .thenReturn(Optional.of(new NormalizedConversationResult(
                         new NormalizedConversationDto(
                                 List.of("사용자", "상대방"),
@@ -136,7 +136,7 @@ class ChatUploadServiceTest {
     void createMixedReportAfterBatchUpload() throws Exception {
         ConversationReportRepository repository = mockRepositoryWithId(5L);
         AiConversationNormalizeService aiNormalizer = Mockito.mock(AiConversationNormalizeService.class);
-        Mockito.when(aiNormalizer.normalizeFiles(any(), any(), any()))
+        Mockito.when(aiNormalizer.normalizeFiles(any(), any(), any(), any()))
                 .thenReturn(Optional.of(new NormalizedConversationResult(
                         new NormalizedConversationDto(
                                 List.of("사용자", "상대방"),
@@ -219,12 +219,16 @@ class ChatUploadServiceTest {
     private static class EmptyAiConversationNormalizeService implements AiConversationNormalizeService {
 
         @Override
-        public Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName) {
+        public Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName, String myName) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<NormalizedConversationResult> normalizeImage(org.springframework.web.multipart.MultipartFile file, String targetName) {
+        public Optional<NormalizedConversationResult> normalizeImage(
+                org.springframework.web.multipart.MultipartFile file,
+                String targetName,
+                String myName
+        ) {
             return Optional.empty();
         }
     }

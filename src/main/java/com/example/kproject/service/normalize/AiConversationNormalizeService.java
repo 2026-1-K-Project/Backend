@@ -8,13 +8,30 @@ import java.util.Optional;
 
 public interface AiConversationNormalizeService {
 
-    Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName);
+    default Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName) {
+        return normalizeText(rawText, targetName, null);
+    }
 
-    Optional<NormalizedConversationResult> normalizeImage(MultipartFile file, String targetName);
+    Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName, String myName);
+
+    default Optional<NormalizedConversationResult> normalizeImage(MultipartFile file, String targetName) {
+        return normalizeImage(file, targetName, null);
+    }
+
+    Optional<NormalizedConversationResult> normalizeImage(MultipartFile file, String targetName, String myName);
 
     default Optional<NormalizedConversationResult> normalizeFiles(
             List<MultipartFile> files,
             String targetName,
+            String description
+    ) {
+        return normalizeFiles(files, targetName, null, description);
+    }
+
+    default Optional<NormalizedConversationResult> normalizeFiles(
+            List<MultipartFile> files,
+            String targetName,
+            String myName,
             String description
     ) {
         return Optional.empty();

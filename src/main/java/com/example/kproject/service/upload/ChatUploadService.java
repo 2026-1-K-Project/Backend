@@ -51,13 +51,24 @@ public class ChatUploadService {
     }
 
     public ChatUploadResponse upload(MultipartFile file, String category, String targetName, String description) {
-        return upload(file, category, targetName, description, null);
+        return upload(file, category, targetName, null, description, null);
     }
 
     public ChatUploadResponse upload(
             MultipartFile file,
             String category,
             String targetName,
+            String description,
+            Long memberId
+    ) {
+        return upload(file, category, targetName, null, description, memberId);
+    }
+
+    public ChatUploadResponse upload(
+            MultipartFile file,
+            String category,
+            String targetName,
+            String myName,
             String description,
             Long memberId
     ) {
@@ -68,8 +79,8 @@ public class ChatUploadService {
         String resolvedCategory = StringUtils.hasText(category) ? category.trim() : DEFAULT_CATEGORY;
         ChatSourceType sourceType = detectSourceType(file);
         NormalizedConversationResult normalizedResult = switch (sourceType) {
-            case TXT -> normalizeTxt(file, targetName);
-            case IMAGE -> normalizeImage(file, targetName);
+            case TXT -> normalizeTxt(file, targetName, myName);
+            case IMAGE -> normalizeImage(file, targetName, myName);
             case MIXED -> throw new ChatUploadException("단일 파일 업로드에서는 MIXED sourceType을 사용할 수 없습니다.");
         };
 
@@ -97,13 +108,24 @@ public class ChatUploadService {
             String targetName,
             String description
     ) {
-        return uploadBatch(files, category, targetName, description, null);
+        return uploadBatch(files, category, targetName, null, description, null);
     }
 
     public ChatUploadResponse uploadBatch(
             List<MultipartFile> files,
             String category,
             String targetName,
+            String description,
+            Long memberId
+    ) {
+        return uploadBatch(files, category, targetName, null, description, memberId);
+    }
+
+    public ChatUploadResponse uploadBatch(
+            List<MultipartFile> files,
+            String category,
+            String targetName,
+            String myName,
             String description,
             Long memberId
     ) {
@@ -119,11 +141,11 @@ public class ChatUploadService {
         NormalizedConversationResult normalizedResult =
                 validFiles.size() == 1 && sourceType != ChatSourceType.MIXED
                         ? switch (sourceType) {
-                            case TXT -> normalizeTxt(validFiles.get(0), targetName);
-                            case IMAGE -> normalizeImage(validFiles.get(0), targetName);
-                            case MIXED -> normalizeFiles(validFiles, targetName, description);
+                            case TXT -> normalizeTxt(validFiles.get(0), targetName, myName);
+                            case IMAGE -> normalizeImage(validFiles.get(0), targetName, myName);
+                            case MIXED -> normalizeFiles(validFiles, targetName, myName, description);
                         }
-                        : normalizeFiles(validFiles, targetName, description);
+                        : normalizeFiles(validFiles, targetName, myName, description);
 
         ConversationReport report = reportStorageService.createReport(
                 resolvedCategory,
@@ -143,21 +165,21 @@ public class ChatUploadService {
         );
     }
 
-    private NormalizedConversationResult normalizeTxt(MultipartFile file, String targetName) {
+    private NormalizedConversationResult normalizeTxt(MultipartFile file, String targetName, String myName) {
         String rawText = readFileAsText(file);
         Optional<NormalizedConversationResult> aiResult =
-                aiConversationNormalizeService.normalizeText(rawText, targetName);
+                aiConversationNormalizeService.normalizeText(rawText, targetName, myName);
         if (aiResult.isPresent()) {
             return aiResult.get();
         }
 
         KakaoChatParsedDocument parsedDocument = kakaoChatFileParserService.parseDocument(file);
-        return conversationNormalizeService.normalize(parsedDocument, targetName);
+        return conversationNormalizeService.normalize(parsedDocument, targetName, myName);
     }
 
-    private NormalizedConversationResult normalizeImage(MultipartFile file, String targetName) {
+    private NormalizedConversationResult normalizeImage(MultipartFile file, String targetName, String myName) {
         Optional<NormalizedConversationResult> aiResult =
-                aiConversationNormalizeService.normalizeImage(file, targetName);
+                aiConversationNormalizeService.normalizeImage(file, targetName, myName);
         if (aiResult.isPresent()) {
             return aiResult.get();
         }
@@ -166,13 +188,19 @@ public class ChatUploadService {
         return conversationNormalizeService.normalizeRawText(
                 extractionResult.rawText(),
                 targetName,
+                myName,
                 extractionResult.warning()
         );
     }
 
-    private NormalizedConversationResult normalizeFiles(List<MultipartFile> files, String targetName, String description) {
+    private NormalizedConversationResult normalizeFiles(
+            List<MultipartFile> files,
+            String targetName,
+            String myName,
+            String description
+    ) {
         Optional<NormalizedConversationResult> aiResult =
-                aiConversationNormalizeService.normalizeFiles(files, targetName, description);
+                aiConversationNormalizeService.normalizeFiles(files, targetName, myName, description);
         if (aiResult.isPresent()) {
             return aiResult.get();
         }
@@ -202,6 +230,7 @@ public class ChatUploadService {
         return conversationNormalizeService.normalizeRawText(
                 rawText.toString(),
                 targetName,
+                myName,
                 warnings.isEmpty()
                         ? "OpenAI 정형화를 사용할 수 없어 업로드 파일의 텍스트 기반 fallback으로 분석했습니다."
                         : String.join(" ", warnings)

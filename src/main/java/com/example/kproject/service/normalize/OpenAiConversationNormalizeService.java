@@ -42,19 +42,19 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
     }
 
     @Override
-    public Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName) {
+    public Optional<NormalizedConversationResult> normalizeText(String rawText, String targetName, String myName) {
         if (!StringUtils.hasText(rawText) || !hasApiKey()) {
             return Optional.empty();
         }
 
         return requestNormalizedConversation(List.of(
-                Map.of("type", "input_text", "text", normalizationPrompt(targetName)),
+                Map.of("type", "input_text", "text", normalizationPrompt(targetName, myName)),
                 Map.of("type", "input_text", "text", rawText)
         ));
     }
 
     @Override
-    public Optional<NormalizedConversationResult> normalizeImage(MultipartFile file, String targetName) {
+    public Optional<NormalizedConversationResult> normalizeImage(MultipartFile file, String targetName, String myName) {
         if (file == null || file.isEmpty() || !hasApiKey()) {
             return Optional.empty();
         }
@@ -65,7 +65,7 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
             String dataUrl = "data:%s;base64,%s".formatted(contentType, base64);
 
             return requestNormalizedConversation(List.of(
-                    Map.of("type", "input_text", "text", normalizationPrompt(targetName)),
+                    Map.of("type", "input_text", "text", normalizationPrompt(targetName, myName)),
                     Map.of("type", "input_image", "image_url", dataUrl)
             ));
         } catch (IOException exception) {
@@ -78,6 +78,7 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
     public Optional<NormalizedConversationResult> normalizeFiles(
             List<MultipartFile> files,
             String targetName,
+            String myName,
             String description
     ) {
         if (files == null || files.isEmpty() || !hasApiKey()) {
@@ -86,7 +87,7 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
 
         try {
             List<Map<String, String>> content = new ArrayList<>();
-            content.add(Map.of("type", "input_text", "text", normalizationPrompt(targetName, description)));
+            content.add(Map.of("type", "input_text", "text", normalizationPrompt(targetName, myName, description)));
             for (int index = 0; index < files.size(); index++) {
                 MultipartFile file = files.get(index);
                 if (file == null || file.isEmpty()) {
@@ -221,13 +222,20 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
     }
 
     private String normalizationPrompt(String targetName) {
-        return normalizationPrompt(targetName, null);
+        return normalizationPrompt(targetName, null, null);
     }
 
-    private String normalizationPrompt(String targetName, String description) {
+    private String normalizationPrompt(String targetName, String myName) {
+        return normalizationPrompt(targetName, myName, null);
+    }
+
+    private String normalizationPrompt(String targetName, String myName, String description) {
         String targetInstruction = StringUtils.hasText(targetName)
                 ? "분석 대상 또는 상대방 이름 힌트: " + targetName.trim()
                 : "분석 대상 이름 힌트는 제공되지 않았습니다.";
+        String myNameInstruction = StringUtils.hasText(myName)
+                ? "사용자 본인 이름 힌트: " + myName.trim()
+                : "사용자 본인 이름 힌트는 제공되지 않았습니다.";
         String requestInstruction = StringUtils.hasText(description)
                 ? "사용자가 특히 궁금해하는 분석 요청: " + description.trim()
                 : "사용자의 추가 분석 요청은 제공되지 않았습니다.";
@@ -248,10 +256,13 @@ public class OpenAiConversationNormalizeService implements AiConversationNormali
                 - 일반 메시지는 TEXT로 분류한다.
                 - 결과는 반드시 지정된 JSON 스키마만 따른다.
                 - 성격/관계 분석은 하지 말고 정형화만 한다.
+                - participants는 가능하면 [사용자 본인, 분석 대상/상대방] 순서로 반환한다.
+                - sender는 원문에 나온 표시명을 유지하되, 이름 힌트와 일치하는 발신자를 정확히 구분한다.
 
                 %s
                 %s
-                """.formatted(targetInstruction, requestInstruction);
+                %s
+                """.formatted(targetInstruction, myNameInstruction, requestInstruction);
     }
 
     private boolean isImage(MultipartFile file) {
