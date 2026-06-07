@@ -29,4 +29,8 @@ public class Member {
         this.password = password;
         this.name = name;
     }
+
+    public void changePassword(String password) {
+        this.password = password;
+    }
 }

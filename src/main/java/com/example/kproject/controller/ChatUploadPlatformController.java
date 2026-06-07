@@ -1,16 +1,20 @@
 package com.example.kproject.controller;
 
+import com.example.kproject.security.AuthMemberResolver;
 import com.example.kproject.dto.upload.ChatUploadResponse;
 import com.example.kproject.service.upload.ChatUploadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.List;
 
@@ -23,9 +27,14 @@ import java.util.List;
 public class ChatUploadPlatformController {
 
     private final ChatUploadService chatUploadService;
+    private final AuthMemberResolver authMemberResolver;
 
-    public ChatUploadPlatformController(ChatUploadService chatUploadService) {
+    public ChatUploadPlatformController(
+            ChatUploadService chatUploadService,
+            AuthMemberResolver authMemberResolver
+    ) {
         this.chatUploadService = chatUploadService;
+        this.authMemberResolver = authMemberResolver;
     }
 
     @Operation(
@@ -63,7 +72,7 @@ public class ChatUploadPlatformController {
             @Parameter(description = "로그인 사용자의 memberId. 없으면 게스트 리포트로 저장합니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return chatUploadService.upload(file, category, targetName, myName, description, memberId);
+        return chatUploadService.upload(file, category, targetName, myName, description, resolveMemberId(memberId));
     }
 
     @Operation(
@@ -88,6 +97,14 @@ public class ChatUploadPlatformController {
             @Parameter(description = "로그인 사용자의 memberId. 없으면 게스트 리포트로 저장합니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return chatUploadService.uploadBatch(files, category, targetName, myName, description, memberId);
+        return chatUploadService.uploadBatch(files, category, targetName, myName, description, resolveMemberId(memberId));
+    }
+
+    private Long resolveMemberId(Long fallbackMemberId) {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        String authorizationHeader = attributes == null
+                ? null
+                : attributes.getRequest().getHeader(HttpHeaders.AUTHORIZATION);
+        return authMemberResolver.resolveMemberId(authorizationHeader, fallbackMemberId);
     }
 }

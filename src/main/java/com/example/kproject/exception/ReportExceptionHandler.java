@@ -16,6 +16,13 @@ public class ReportExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
     }
 
+    @ExceptionHandler(ReportAccessDeniedException.class)
+    public ResponseEntity<ProblemDetail> handleReportAccessDeniedException(ReportAccessDeniedException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, exception.getMessage());
+        problemDetail.setTitle("Report access denied");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problemDetail);
+    }
+
     @ExceptionHandler(ReportGenerationException.class)
     public ResponseEntity<ProblemDetail> handleReportGenerationException(ReportGenerationException exception) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());

@@ -111,6 +111,9 @@ public class OpenAiDeepAnalysisService implements AiDeepAnalysisService {
                 - 실제 문장 근거가 없으면 quote를 빈 문자열로 둔다.
                 - "무조건 좋아한다", "확실하다"처럼 단정하지 말고 가능성/신호로 표현한다.
                 - positiveSignals와 riskSignals를 분리한다.
+                - requestAnswer는 사용자 요청에 대한 직접 답변으로 작성한다.
+                - requestReason은 그 답변을 내린 핵심 이유를 실제 대화 흐름에 근거해 작성한다.
+                - requestEvidence는 사용자 요청과 직접 관련 있는 실제 대화 근거를 1~4개로 요약한다.
                 - nextActions는 바로 보낼 수 있는 자연스러운 한국어 멘트로 작성한다.
                 - avoidMessages는 지금 단계에서 피해야 할 부담스러운 표현과 이유를 작성한다.
                 - 개인정보 노출을 줄이기 위해 quote는 80자 이하로 짧게 자른다.
@@ -190,6 +193,12 @@ public class OpenAiDeepAnalysisService implements AiDeepAnalysisService {
                 clamp(analysis.confidence()),
                 safeText(analysis.relationshipStage(), "관계 탐색 단계"),
                 safeText(analysis.oneLineSummary(), "대화 흐름을 바탕으로 관계 신호를 분석했습니다."),
+                safeText(analysis.requestAnswer(), "요청한 내용은 대화 근거가 더 필요해 단정하기 어렵습니다."),
+                safeText(analysis.requestReason(), "대화량과 반응 흐름을 함께 보면 가능성은 있으나 추가 확인이 필요합니다."),
+                analysis.requestEvidence() == null ? List.of() : analysis.requestEvidence().stream()
+                        .filter(StringUtils::hasText)
+                        .limit(4)
+                        .toList(),
                 analysis.positiveSignals() == null ? List.of() : analysis.positiveSignals().stream().limit(5).toList(),
                 analysis.riskSignals() == null ? List.of() : analysis.riskSignals().stream().limit(5).toList(),
                 safeText(analysis.counterpartyStyle(), ""),
@@ -278,6 +287,9 @@ public class OpenAiDeepAnalysisService implements AiDeepAnalysisService {
                                 "confidence",
                                 "relationshipStage",
                                 "oneLineSummary",
+                                "requestAnswer",
+                                "requestReason",
+                                "requestEvidence",
                                 "positiveSignals",
                                 "riskSignals",
                                 "counterpartyStyle",
@@ -285,17 +297,20 @@ public class OpenAiDeepAnalysisService implements AiDeepAnalysisService {
                                 "nextActions",
                                 "avoidMessages"
                         ),
-                        "properties", Map.of(
-                                "verdict", Map.of("type", "string"),
-                                "confidence", Map.of("type", "integer", "minimum", 0, "maximum", 100),
-                                "relationshipStage", Map.of("type", "string"),
-                                "oneLineSummary", Map.of("type", "string"),
-                                "positiveSignals", Map.of("type", "array", "items", signal),
-                                "riskSignals", Map.of("type", "array", "items", signal),
-                                "counterpartyStyle", Map.of("type", "string"),
-                                "userPattern", Map.of("type", "string"),
-                                "nextActions", Map.of("type", "array", "items", nextAction),
-                                "avoidMessages", Map.of("type", "array", "items", avoidMessage)
+                        "properties", Map.ofEntries(
+                                Map.entry("verdict", Map.of("type", "string")),
+                                Map.entry("confidence", Map.of("type", "integer", "minimum", 0, "maximum", 100)),
+                                Map.entry("relationshipStage", Map.of("type", "string")),
+                                Map.entry("oneLineSummary", Map.of("type", "string")),
+                                Map.entry("requestAnswer", Map.of("type", "string")),
+                                Map.entry("requestReason", Map.of("type", "string")),
+                                Map.entry("requestEvidence", Map.of("type", "array", "items", Map.of("type", "string"))),
+                                Map.entry("positiveSignals", Map.of("type", "array", "items", signal)),
+                                Map.entry("riskSignals", Map.of("type", "array", "items", signal)),
+                                Map.entry("counterpartyStyle", Map.of("type", "string")),
+                                Map.entry("userPattern", Map.of("type", "string")),
+                                Map.entry("nextActions", Map.of("type", "array", "items", nextAction)),
+                                Map.entry("avoidMessages", Map.of("type", "array", "items", avoidMessage))
                         )
                 )
         );
