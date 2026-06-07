@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: backend-o2w3
+    runtime: docker
+    plan: free
+    region: singapore
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false
