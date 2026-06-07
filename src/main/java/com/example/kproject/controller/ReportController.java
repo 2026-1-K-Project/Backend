@@ -10,12 +10,14 @@ import com.example.kproject.dto.report.ReportQuestionsResponse;
 import com.example.kproject.dto.report.ReportRelationshipResponse;
 import com.example.kproject.dto.report.ReportStatusResponse;
 import com.example.kproject.dto.report.ReportSummaryResponse;
+import com.example.kproject.security.AuthMemberResolver;
 import com.example.kproject.service.report.ReportSectionQueryService;
 import com.example.kproject.service.report.ReportStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.List;
 
@@ -33,13 +37,16 @@ public class ReportController {
 
     private final ReportSectionQueryService reportSectionQueryService;
     private final ReportStorageService reportStorageService;
+    private final AuthMemberResolver authMemberResolver;
 
     public ReportController(
             ReportSectionQueryService reportSectionQueryService,
-            ReportStorageService reportStorageService
+            ReportStorageService reportStorageService,
+            AuthMemberResolver authMemberResolver
     ) {
         this.reportSectionQueryService = reportSectionQueryService;
         this.reportStorageService = reportStorageService;
+        this.authMemberResolver = authMemberResolver;
     }
 
     @Operation(summary = "보관함 리포트 목록 조회")
@@ -48,7 +55,7 @@ public class ReportController {
             @Parameter(description = "로그인 사용자 memberId. 없으면 게스트 리포트만 조회합니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return reportStorageService.listReports(memberId, false);
+        return reportStorageService.listReports(resolveMemberId(memberId), false);
     }
 
     @Operation(summary = "휴지통 리포트 목록 조회")
@@ -57,7 +64,7 @@ public class ReportController {
             @Parameter(description = "로그인 사용자 memberId. 없으면 게스트 휴지통만 조회합니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return reportStorageService.listReports(memberId, true);
+        return reportStorageService.listReports(resolveMemberId(memberId), true);
     }
 
     @Operation(summary = "저장된 리포트 조회")
@@ -67,7 +74,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getDetail(reportId);
     }
 
@@ -78,7 +85,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return reportStorageService.getStatus(reportId, memberId);
+        return reportStorageService.getStatus(reportId, resolveMemberId(memberId));
     }
 
     @Operation(summary = "종합 요약 조회")
@@ -88,7 +95,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getSummary(reportId);
     }
 
@@ -99,7 +106,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getRelationship(reportId);
     }
 
@@ -110,7 +117,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getPersonality(reportId);
     }
 
@@ -121,7 +128,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getPreferences(reportId);
     }
 
@@ -132,7 +139,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getInsights(reportId);
     }
 
@@ -143,7 +150,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         ReportInsightsResponse insights = reportSectionQueryService.getInsights(reportId);
         return new ReportQuestionsResponse(reportId, insights.recommendedQuestions());
     }
@@ -155,7 +162,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.assertReportOwner(reportId, memberId);
+        reportStorageService.assertReportOwner(reportId, resolveMemberId(memberId));
         return reportSectionQueryService.getAppResult(reportId);
     }
 
@@ -166,7 +173,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return reportStorageService.moveToTrash(reportId, memberId);
+        return reportStorageService.moveToTrash(reportId, resolveMemberId(memberId));
     }
 
     @Operation(summary = "휴지통 리포트 복원")
@@ -176,7 +183,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        return reportStorageService.restore(reportId, memberId);
+        return reportStorageService.restore(reportId, resolveMemberId(memberId));
     }
 
     @Operation(summary = "리포트 영구 삭제")
@@ -186,7 +193,7 @@ public class ReportController {
             @PathVariable Long reportId,
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.deleteReport(reportId, memberId);
+        reportStorageService.deleteReport(reportId, resolveMemberId(memberId));
         return ResponseEntity.noContent().build();
     }
 
@@ -196,7 +203,15 @@ public class ReportController {
             @Parameter(description = "로그인 사용자 memberId. 없으면 게스트 휴지통만 비웁니다.", example = "1")
             @RequestParam(value = "memberId", required = false) Long memberId
     ) {
-        reportStorageService.emptyTrash(memberId);
+        reportStorageService.emptyTrash(resolveMemberId(memberId));
         return ResponseEntity.noContent().build();
+    }
+
+    private Long resolveMemberId(Long fallbackMemberId) {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        String authorizationHeader = attributes == null
+                ? null
+                : attributes.getRequest().getHeader(HttpHeaders.AUTHORIZATION);
+        return authMemberResolver.resolveMemberId(authorizationHeader, fallbackMemberId);
     }
 }
